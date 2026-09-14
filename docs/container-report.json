@@ -1,0 +1,31 @@
+{
+  "date": "2026-09-14T11:31:35.494Z",
+  "environment": "Docker Desktop Linux, Node 24.21.0, CPU limit 1, memory limit 256MiB, TLS simulated SMTP",
+  "memory_samples": [
+    "33.34MiB / 256MiB",
+    "33.04MiB / 256MiB",
+    "33.27MiB / 256MiB",
+    "34.52MiB / 256MiB",
+    "34.84MiB / 256MiB",
+    "34.06MiB / 256MiB",
+    "34.11MiB / 256MiB",
+    "34.54MiB / 256MiB",
+    "35.69MiB / 256MiB",
+    "35.23MiB / 256MiB"
+  ],
+  "idle_memory": "30.04MiB / 256MiB",
+  "load": {
+    "requests": 10,
+    "interval_seconds": 6,
+    "elapsed_seconds": 55.26,
+    "errors": 0,
+    "min_ms": 159.70240000000194,
+    "mean_ms": 179.07060000000064,
+    "max_ms": 193.81459999999788,
+    "smtp_accepted": 10
+  },
+  "container_recreation": "passed: used_count=10",
+  "backup_restore": "passed: configuration, templates, used_count=10 and original request status retained",
+  "process_crash": "passed: interrupted DATA recovered as unknown; reserved=1; no resend",
+  "image_bytes": 94644590
+}

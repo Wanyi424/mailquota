@@ -1,0 +1,15 @@
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve, join } from 'node:path';
+import selfsigned from 'selfsigned';
+const out = resolve('test-output'); mkdirSync(out, { recursive: true });
+const root = mkdtempSync(join(out, 'nginx-'));
+const cert = await selfsigned.generate([{ name: 'commonName', value: 'mail.example.com' }], { keySize: 2048 });
+writeFileSync(join(root, 'fullchain.pem'), cert.cert); writeFileSync(join(root, 'privkey.pem'), cert.private, { mode: 0o600 });
+const conf = readFileSync('deploy/nginx.conf', 'utf8').replaceAll('/etc/nginx/certs/mail.example.com/', '/verification/');
+writeFileSync(join(root, 'default.conf'), conf);
+execFileSync('docker', ['run', '--rm', '-v', `${root}:/verification:ro`, '-v', `${join(root, 'default.conf')}:/etc/nginx/conf.d/default.conf:ro`, 'nginx:stable-alpine', 'nginx', '-t'], { stdio: 'inherit' });
+const compose = readFileSync('docker-compose.yml', 'utf8').replace('env_file: .env', 'env_file: .env.example');
+execFileSync('docker', ['compose', '--env-file', '.env.example', '-f', '-', 'config', '--quiet'], { input: compose, stdio: ['pipe', 'inherit', 'inherit'] });
+execFileSync('docker', ['run', '--rm', '-v', `${resolve('scripts')}:/verification:ro`, 'mailquota:local', 'sh', '-n', '/verification/backup.sh'], { stdio: 'inherit' });
+console.log('Nginx syntax, Compose configuration and backup shell syntax passed.');

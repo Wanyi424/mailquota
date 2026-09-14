@@ -1,0 +1,106 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import request from 'supertest';
+import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { fixture, origin, password } from './helpers.js';
+import { ConfigStore } from '../src/config.js';
+import { initialize } from '../scripts/init.js';
+
+test('管理员隔离、CSRF、会话退出、Secure Cookie 与 HTTPS', async t => {
+  const f = fixture(t), c = f.customer();
+  assert.equal((await request(f.app).get('/admin/api/customers').set('Authorization', `Bearer ${c.api_key}`)).status, 401);
+  const { agent, csrf } = await f.login();
+  assert.equal((await agent.get('/admin/api/session')).body.data.csrf_token, csrf);
+  assert.equal((await agent.patch('/admin/api/customers/a').set('Origin', origin).send({ version: 1, name: 'new' })).status, 403);
+  assert.equal((await agent.patch('/admin/api/customers/a').set('Origin', 'https://evil.test').set('X-CSRF-Token', csrf).send({ version: 1, name: 'new' })).status, 403);
+  const out = await agent.post('/admin/api/logout').set('Origin', origin).set('X-CSRF-Token', csrf).send({}); assert.equal(out.status, 200);
+  assert.equal((await agent.get('/admin/api/customers')).status, 401);
+  const secure = fixture(t, { secure: true });
+  assert.equal((await request(secure.app).get('/admin/api/session')).body.code, 'HTTPS_REQUIRED');
+  const login = await request(secure.app).post('/admin/api/login').set('X-Forwarded-Proto', 'https').set('Origin', origin).send({ username: 'admin', password });
+  assert.equal(login.status, 200); assert.match(login.headers['set-cookie'][0], /HttpOnly/); assert.match(login.headers['set-cookie'][0], /Secure/); assert.match(login.headers['set-cookie'][0], /SameSite=Strict/);
+});
+test('登录同来源 15 分钟最多10次失败，窗口过期恢复', async t => {
+  const f = fixture(t);
+  for (let i = 0; i < 10; i++) assert.equal((await request(f.app).post('/admin/api/login').set('Origin', origin).send({ username: 'admin', password: 'incorrect' })).status, 401);
+  const blocked = await request(f.app).post('/admin/api/login').set('Origin', origin).send({ username: 'admin', password });
+  assert.equal(blocked.status, 429); assert.equal(blocked.headers['retry-after'], '900');
+  f.advance(900000); await f.login();
+});
+test('管理客户创建、增额版本冲突、启停、密钥立即轮换并保留历史', async t => {
+  const f = fixture(t), { agent, csrf } = await f.login();
+  const mutate = (method, path, body) => agent[method](`/admin/api${path}`).set('Origin', origin).set('X-CSRF-Token', csrf).send(body);
+  const created = await mutate('post', '/customers', { customer_id: 'a', name: 'A', from_name: 'A', subject: 'A', text_template: '{{code}}', reply_to: '', html: '<p>{{code}}</p>' });
+  assert.equal(created.status, 201); assert.equal(created.body.data.quota_total, 0); assert.equal(created.body.data.enabled, false);
+  assert(created.body.data.api_key.length >= 43);
+  const old = f.config.get('a');
+  assert.equal((await mutate('put', '/customers/a/quota', { version: 1, quota_total: 5 })).status, 200);
+  assert.equal((await mutate('put', '/customers/a/quota', { version: 1, quota_total: 5 })).body.code, 'EDIT_CONFLICT');
+  assert.equal((await mutate('put', '/customers/a/quota', { version: 2, quota_total: 4 })).status, 400);
+  assert.equal((await mutate('put', '/customers/a/enabled', { version: 2, enabled: true, confirmed: true })).status, 200);
+  await f.service.send(f.config.get('a'), f.input());
+  const rotation = await mutate('post', '/customers/a/key/reset', { version: 3, confirmed: true }); assert.equal(rotation.status, 200);
+  assert.notEqual(rotation.body.data.api_key, old.api_key); assert.equal(f.usage(old).used_count, 1);
+  assert.throws(() => f.service.auth('a', old.api_key), { code: 'AUTH_INVALID' });
+  const list = await agent.get('/admin/api/customers'); assert.equal(list.body.data.items[0].api_key, undefined);
+  const detail = await agent.get('/admin/api/customers/a'); assert.equal(detail.body.data.api_key, undefined);
+  assert.equal(detail.body.data.available_count, 4);
+  const config = new ConfigStore(f.root, f.db); assert.equal(config.public(config.get('a')).used_count, 1);
+  assert.equal((await mutate('delete', '/customers/a', {})).status, 404);
+});
+test('模板与邮件校验、隔离预览、模板独立版本及配置文件不外泄', async t => {
+  const f = fixture(t); f.customer(); const { agent, csrf } = await f.login();
+  const put = (path, body) => agent.put(`/admin/api${path}`).set('Origin', origin).set('X-CSRF-Token', csrf).send(body);
+  for (const html of ['no code', '{{code}} {{secret}}', '{{code}} {{x', '{{code}}' + 'a'.repeat(256 * 1024)]) assert.equal((await put('/customers/a/template', { version: 1, html })).status, 400);
+  const payload = '<script>parent.document.cookie</script><p>{{code}}</p>';
+  const preview = await agent.post('/admin/api/template/preview').set('Origin', origin).set('X-CSRF-Token', csrf).send({ html: payload });
+  assert.equal(preview.status, 200); assert.match(preview.text, /083721/); assert.match(preview.headers['content-security-policy'], /^sandbox;/); assert.equal(f.mails.length, 0);
+  const oldTemplate = f.config.get('a').html_template;
+  assert.equal((await put('/customers/a/template', { version: 1, html: '<h1>{{code}}</h1>' })).status, 200);
+  assert.notEqual(f.config.get('a').html_template, oldTemplate);
+  assert.equal((await put('/customers/a/template', { version: 1, html: '{{code}}' })).status, 409);
+  assert.equal((await put('/customers/a/mail', { version: 2, from_name: 'x\r\nBcc:x', subject: 's', reply_to: '', text_template: '{{code}}' })).status, 400);
+  for (const path of ['/config/customers.json', '/storage/data/mailquota.sqlite', '/templates/default.html']) assert.equal((await agent.get(path)).status, 404);
+  assert.equal((await agent.get('/admin/api/customers/a/template')).body.data.html, '<h1>{{code}}</h1>');
+});
+test('管理记录筛选分页、人工结算依据必填、并发结算冲突', async t => {
+  const f = fixture(t, { send: () => ({ status: 'unknown' }) }), c = f.customer();
+  const a = await f.service.send(c, f.input('a@example.com')); await f.service.send(c, f.input('b@example.com'));
+  const { agent, csrf } = await f.login();
+  const list = await agent.get('/admin/api/requests?customer_id=a&status=unknown&page_size=1');
+  assert.equal(list.body.data.total, 2); assert.equal(list.body.data.items.length, 1); assert.equal(list.body.data.items[0].code, undefined);
+  const filtered = await agent.get('/admin/api/requests?email=a%40example.com'); assert.equal(filtered.body.data.total, 1);
+  assert.equal((await agent.get('/admin/api/requests?page_size=101')).status, 400);
+  const resolve = body => agent.post(`/admin/api/requests/${a.id}/resolve`).set('Origin', origin).set('X-CSRF-Token', csrf).send(body);
+  assert.equal((await resolve({ status: 'accepted', note: '', confirmed: true })).status, 400);
+  const results = await Promise.all([resolve({ status: 'accepted', note: '服务商受理记录', confirmed: true }), resolve({ status: 'failed', note: '重复操作', confirmed: true })]);
+  assert.deepEqual(results.map(r => r.status).sort(), [200, 409]); assert.equal(f.usage(c).reserved_count, 1);
+});
+test('启动校验阻止丢失用量、非法配置、降额、重复客户；重复初始化不清零', async t => {
+  const f = fixture(t), c = f.customer(); await f.service.send(c, f.input());
+  assert.throws(() => initialize(f.root), /拒绝重复初始化/);
+  const path = join(f.root, 'config', 'customers.json'), original = readFileSync(path, 'utf8');
+  const raw = JSON.parse(original); raw.customers[0].quota_total = 0; writeFileSync(path, JSON.stringify(raw));
+  assert.throws(() => new ConfigStore(f.root, f.db), /不一致/);
+  writeFileSync(path, original); raw.customers[0].quota_total = 100; raw.customers.push(raw.customers[0]); writeFileSync(path, JSON.stringify(raw));
+  assert.throws(() => new ConfigStore(f.root, f.db), /重复/);
+  writeFileSync(path, original);
+  f.db.pragma('foreign_keys=OFF'); f.db.prepare('DELETE FROM customer_usage').run();
+  assert.throws(() => new ConfigStore(f.root, f.db), /不一致/);
+  const r = await f.api(c, 'post', '/send', f.input('new@example.com')); assert.equal(r.body.code, 'SERVICE_UNAVAILABLE');
+  assert.equal(f.db.prepare('SELECT count(*) n FROM customer_usage').get().n, 0);
+});
+test('保存失败不发布内存配置，健康检查发现持久化丢失', async t => {
+  const f = fixture(t), c = f.customer(); const previousPath = f.config.path;
+  f.config.path = join(f.root, 'missing-directory', 'customers.json');
+  assert.throws(() => f.config.update('a', 1, { quota_total: 200 }));
+  assert.equal(f.config.get('a').version, 1); assert.equal(f.config.get('a').quota_total, 100);
+  f.config.path = previousPath;
+  unlinkSync(previousPath); assert.equal((await request(f.app).get('/health/ready')).status, 503);
+  assert.equal((await request(f.app).get('/health/live')).status, 200);
+});
+test('管理员会话8小时后绝对过期', async t => {
+  const f = fixture(t), { agent } = await f.login();
+  f.advance(8 * 3600000); assert.equal((await agent.get('/admin/api/session')).status, 401);
+});
