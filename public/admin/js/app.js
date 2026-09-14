@@ -4,22 +4,23 @@ import { $, $$, loading, empty, bindSubmit, field, input, formError, showToast, 
 import { customersPage, customerPage } from './pages/customers.js';
 import { templatesPage } from './pages/templates.js';
 import { requestsPage } from './pages/requests.js';
+import { icon } from './icons.js';
 
 const app = $('#app');
 let session = null, epoch = 0, dirty = () => false, currentHash = '', reauth = null, navigating = false;
 const api = createApi({ onExpired: () => { if (session) promptLogin(); } });
-const navigation = [ ['customers', '客户管理'], ['templates', '邮件模板'], ['requests', '发送记录'], ['pending', '待确认处理'] ];
+const navigation = [ ['customers', '客户管理', 'users'], ['templates', '邮件模板', 'mail'], ['requests', '发送记录', 'send'], ['pending', '待确认处理', 'circle-help'] ];
 
 function loginFields(username = '') {
-  return `${formError}${field('管理员账号', input('username', username, 'required maxlength="200" autocomplete="username" placeholder="输入管理员账号"'))}${field('登录密码', '<span class="password-field"><input type="password" name="password" required maxlength="200" autocomplete="current-password" placeholder="输入登录密码"><button type="button" class="button quiet small" data-password aria-label="显示密码" aria-pressed="false">显示</button></span>')}<button class="button primary full-width" type="submit">登录管理端</button>`;
+  return `${formError}${field('管理员账号', input('username', username, 'required maxlength="200" autocomplete="username" placeholder="输入管理员账号"'))}${field('登录密码', `<span class="password-field"><input type="password" name="password" required maxlength="200" autocomplete="current-password" placeholder="输入登录密码"><button type="button" class="button quiet icon-button" data-password aria-label="显示密码" title="显示密码" aria-pressed="false">${icon('eye')}</button></span>`)}<button class="button primary full-width" type="submit">登录</button>`;
 }
 function bindPassword(form) {
-  $('[data-password]', form).addEventListener('click', event => { const input = $('[name="password"]', form), show = input.type === 'password'; input.type = show ? 'text' : 'password'; event.currentTarget.textContent = show ? '隐藏' : '显示'; event.currentTarget.setAttribute('aria-label', show ? '隐藏密码' : '显示密码'); event.currentTarget.setAttribute('aria-pressed', String(show)); });
+  $('[data-password]', form).addEventListener('click', event => { const input = $('[name="password"]', form), show = input.type === 'password'; input.type = show ? 'text' : 'password'; event.currentTarget.innerHTML = icon(show ? 'eye-off' : 'eye'); event.currentTarget.setAttribute('aria-label', show ? '隐藏密码' : '显示密码'); event.currentTarget.title = show ? '隐藏密码' : '显示密码'; event.currentTarget.setAttribute('aria-pressed', String(show)); });
 }
 function renderLogin() {
   epoch++; dirty = () => false; session = null;
   $$('dialog').forEach(dialog => dialog.remove()); reauth = null;
-  app.innerHTML = `<div class="login-shell"><aside class="login-story"><span class="brand-word">MailQuota<span>.</span></span><div class="login-copy"><h1>每一封邮件，<br><span>都心中有数。</span></h1><p>集中管理客户、验证码邮件与永久额度。让日常发送清晰，让每次处理有据。</p><div class="login-principles"><div><strong>客户独立</strong><small>凭据与邮件样式分别管理</small></div><div><strong>额度透明</strong><small>已用与占用，清楚区分</small></div></div></div><p class="login-caption">MailQuota · 邮件验证码与额度服务</p></aside><main class="login-main" id="main"><div class="login-box"><div class="login-mobile-brand"><span class="brand-word">MailQuota<span>.</span></span></div><h2>欢迎回来</h2><p>登录后，继续管理你的邮件服务。</p><form class="login-form" data-busy-label="正在登录…">${loginFields()}</form><p class="login-help">仅供服务管理员使用。忘记密码时，请通过服务器配置重设管理员密码。</p></div></main></div>`;
+  app.innerHTML = `<div class="login-shell"><aside class="login-story"><span class="brand-word">MailQuota<span>.</span></span><div class="login-copy"><h1>每一封邮件，<br><span>都心中有数。</span></h1></div><p class="login-caption">邮件验证码与额度服务</p></aside><main class="login-main" id="main"><div class="login-box"><div class="login-mobile-brand"><span class="brand-word">MailQuota<span>.</span></span></div><h2>管理员登录</h2><form class="login-form" data-busy-label="正在登录…">${loginFields()}</form><p class="login-help">忘记密码？请在服务器上重设。</p></div></main></div>`;
   const form = $('form', app); bindPassword(form);
   bindSubmit(form, async values => { session = await api.login(values.username, values.password); $('[name="password"]', form).value = ''; renderShell(); await renderRoute(location.hash || '#/customers'); });
 }
@@ -33,7 +34,7 @@ function promptLogin() {
   });
 }
 function renderShell() {
-  app.innerHTML = `<div class="app-shell"><button class="nav-overlay" aria-label="收起导航"></button><aside class="sidebar"><a class="brand" href="#/customers"><span class="brand-word">MailQuota<span>.</span></span><span class="brand-sub">邮件服务管理</span></a><div class="nav-label">工作空间</div><nav class="nav" aria-label="主导航">${navigation.map(([path, label]) => `<a href="#/${path}" data-nav="${path}"><span>${label}</span></a>`).join('')}</nav><div class="sidebar-bottom"><div class="sidebar-note">永久额度 · 按客户累计<br>独立的邮件验证码服务</div></div></aside><header class="topbar"><div class="breadcrumb"><button class="button quiet small mobile-menu" aria-label="展开导航" aria-expanded="false">菜单</button><span>管理控制台</span><span aria-hidden="true">/</span><strong data-breadcrumb>客户管理</strong></div><div class="account"><span class="avatar" aria-hidden="true">${e([...session.username][0]?.toUpperCase() || 'A')}</span><span class="account-name">${e(session.username)}</span><button class="button quiet small" data-logout>退出</button></div></header><main id="main" class="content" tabindex="-1"></main></div>`;
+  app.innerHTML = `<div class="app-shell"><button class="nav-overlay" aria-label="收起导航"></button><aside class="sidebar"><a class="brand" href="#/customers"><span class="brand-word">MailQuota<span>.</span></span></a><nav class="nav" aria-label="主导航">${navigation.map(([path, label, symbol]) => `<a href="#/${path}" data-nav="${path}">${icon(symbol)}<span>${label}</span></a>`).join('')}</nav></aside><header class="topbar"><div class="breadcrumb"><button class="button quiet icon-button mobile-menu" aria-label="展开导航" aria-expanded="false">${icon('menu')}</button><a class="breadcrumb-home" href="#/customers">管理控制台</a><span aria-hidden="true">/</span><h1 data-breadcrumb id="page-title" tabindex="-1">客户管理</h1></div><div class="account"><span class="avatar" aria-hidden="true">${e([...session.username][0]?.toUpperCase() || 'A')}</span><span class="account-name">${e(session.username)}</span><button class="button quiet icon-button" data-logout aria-label="退出登录" title="退出登录">${icon('log-out')}</button></div></header><main id="main" class="content" tabindex="-1" aria-labelledby="page-title"></main></div>`;
   function closeMenu() { $('.app-shell', app).classList.remove('nav-open'); $('.mobile-menu', app).setAttribute('aria-expanded', 'false'); }
   $('.mobile-menu', app).addEventListener('click', event => { const open = $('.app-shell', app).classList.toggle('nav-open'); event.currentTarget.setAttribute('aria-expanded', String(open)); });
   $('.nav-overlay', app).addEventListener('click', closeMenu);
@@ -64,7 +65,7 @@ async function renderRoute(hash) {
   const root = $('#main', app); if (!root) return;
   root.innerHTML = loading(); root.setAttribute('aria-busy', 'true');
   let info;
-  try { info = routeInfo(hash); } catch { root.innerHTML = empty('页面地址不正确', '请从侧边导航重新进入。'); root.removeAttribute('aria-busy'); return; }
+  try { info = routeInfo(hash); } catch { root.innerHTML = empty('页面地址不正确，请从侧边导航重新进入。'); root.removeAttribute('aria-busy'); return; }
   const [page = 'customers', id] = info.parts;
   $$('[data-nav]', app).forEach(node => { const selected = node.dataset.nav === page; node.classList.toggle('active', selected); if (selected) node.setAttribute('aria-current', 'page'); else node.removeAttribute('aria-current'); });
   $('[data-breadcrumb]', app).textContent = navigation.find(([key]) => key === page)?.[1] || '管理控制台';
@@ -72,6 +73,7 @@ async function renderRoute(hash) {
   let allCustomersPromise;
   const ctx = {
     root, api, active: () => epoch === localEpoch && Boolean(session),
+    setBreadcrumb: name => { if (epoch === localEpoch) { $('[data-breadcrumb]', app).textContent = `客户管理 / ${name}`; document.title = `${name} · MailQuota`; } },
     setDirty: fn => { if (epoch === localEpoch) dirty = fn; },
     navigate: (target, options) => navigate(target, options),
     refresh: options => epoch === localEpoch ? navigate(currentHash, { replace: true, ...options }) : Promise.resolve(false),
@@ -87,11 +89,11 @@ async function renderRoute(hash) {
     else if (page === 'customers' && id) await customerPage(ctx, id);
     else if (page === 'templates') await templatesPage(ctx, id, info.query.get('tab'));
     else if (page === 'requests' || page === 'pending') await requestsPage(ctx, page === 'pending', info.query);
-    else root.innerHTML = empty('页面不存在', '请使用左侧导航进入客户、模板或发送记录。', '<a class="button primary" href="#/customers">返回客户管理</a>');
-    if (ctx.active()) $('h1', root)?.focus({ preventScroll: true });
+    else root.innerHTML = empty('页面不存在', '<a class="button primary" href="#/customers">返回客户管理</a>');
+    if (ctx.active()) $('[data-breadcrumb]', app)?.focus({ preventScroll: true });
   } catch (error) {
     if (!ctx.active()) return;
-    root.innerHTML = empty(error.code === 'CUSTOMER_NOT_FOUND' ? '客户不存在' : '暂时无法读取页面', explainError(error), '<button class="button secondary" data-retry-page>重新加载</button>');
+    root.innerHTML = empty(error.code === 'CUSTOMER_NOT_FOUND' ? '客户不存在' : explainError(error), `<button class="button secondary" data-retry-page>${icon('refresh-cw')}重新加载</button>`);
     $('[data-retry-page]', root).addEventListener('click', () => { void navigate(currentHash, { replace: true }); });
   } finally { if (ctx.active()) root.removeAttribute('aria-busy'); }
 }
@@ -118,7 +120,7 @@ async function start() {
   try { session = await api.session(); renderShell(); await renderRoute(location.hash || '#/customers'); }
   catch (error) {
     if (error.code === 'ADMIN_AUTH_REQUIRED') { renderLogin(); return; }
-    app.innerHTML = `<main class="boot">${empty('暂时无法连接管理服务', explainError(error), '<button class="button primary" data-start-retry>重新连接</button>')}</main>`;
+    app.innerHTML = `<main class="boot">${empty(explainError(error), `<button class="button primary" data-start-retry>${icon('refresh-cw')}重新连接</button>`)}</main>`;
     $('[data-start-retry]', app).addEventListener('click', () => { void start(); });
   }
 }

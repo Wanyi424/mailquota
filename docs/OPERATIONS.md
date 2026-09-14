@@ -5,7 +5,7 @@
 一台主机、一个容器、一个Node进程。SQLite/配置/模板挂载本机磁盘。不要将目录交给客户、公开HTTP下载、放网络共享盘，或多副本并行运行。
 
 1. 准备HTTPS域名及证书、阿里云发信地址和SMTP账号。
-2. `cp .env.example .env`；`npm ci` 后 `npm run password` 生成管理员密码哈希和随机会话密钥，保留哈希两侧单引号（Compose避免把bcrypt的美元符解释成变量）。填入所有空配置，PUBLIC_ORIGIN为不带尾斜线的HTTPS origin。
+2. `cp .env.example .env`；`npm ci` 后运行 `npm run password`，密码盐哈希自动写入项目 `.env`（自动加单引号，避免Compose解释美元符）；有效会话密钥保留，缺失时自动生成。填写其他配置，PUBLIC_ORIGIN为不带尾斜线的HTTP或HTTPS origin。本地可填 `http://localhost:3000`，直接访问该地址的 `/admin/`，无需证书和Nginx。
 3. 在目标部署平台构建 `docker compose build`。Docker使用独立构建阶段编译SQLite扩展，运行镜像不含编译器；低内存生产机优先在同架构构建机构建并导入镜像，不在可用内存不足1GB的机器强行编译依赖。
 4. Linux宿主机预建 `storage`，设置所有者1000:1000、目录权限700。服务以node用户运行。首次运行 `docker compose run --rm mailquota node scripts/init.js`，初始化空客户配置与数据库。已有目录拒绝重复初始化。
 5. `docker compose up -d`，检查 `docker compose logs --tail=50 mailquota` 和 `docker compose ps`。
@@ -24,7 +24,7 @@ SMTP_SECURE=true表示465等直接TLS；false启用强制STARTTLS（不是允许
 - 增加额度读取详情的version，提交目标quota_total，不能降低。
 - 重置密钥需confirmed:true；旧密钥立即失效，历史与用量不变，已开始发送继续结算。
 - 待确认记录查询status=unknown，根据阿里云控制台核查，填写依据后确认受理或释放。不要仅因超时、退信、垃圾箱或用户声称未收到就释放。
-- 忘记管理员密码：服务器重新生成密码哈希、更新.env、重建服务；会话全部失效。
+- 忘记管理员密码：在项目目录执行 `npm run password` 自动更新.env，然后重启Node服务；Docker使用 `docker compose up -d --force-recreate` 重建服务以重新加载环境变量。会话全部失效。
 
 ## 健康、日志和关停
 

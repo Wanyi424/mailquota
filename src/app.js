@@ -10,10 +10,10 @@ import { AppError, fail, parse } from './errors.js';
 import { fields, version, sendSchema, verifySchema, requestId, email, htmlSchema, render } from './validation.js';
 import { requestData, sendResponse } from './service.js';
 
-export function createApp({ service, config, admin, secure = true, trustProxy = 'loopback', logger = () => {} }) {
+export function createApp({ service, config, admin, secure = new URL(admin.origin).protocol === 'https:', trustProxy = 'loopback', logger = () => {} }) {
   const app = express();
   app.disable('x-powered-by'); app.set('trust proxy', trustProxy);
-  app.use(helmet({ contentSecurityPolicy: { directives: { imgSrc: ["'self'", 'https:', 'data:'], frameSrc: ["'self'"], objectSrc: ["'none'"] } } })); app.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+  app.use(helmet({ strictTransportSecurity: secure ? undefined : false, contentSecurityPolicy: { directives: { imgSrc: ["'self'", 'https:', 'data:'], frameSrc: ["'self'"], objectSrc: ["'none'"], upgradeInsecureRequests: secure ? [] : null } } })); app.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   app.get('/health/live', (req, res) => res.json({ status: 'live' }));
   app.get('/health/ready', (req, res, next) => { try { if (service.stopping) throw new Error('停止中'); config.check(); res.json({ status: 'ready' }); } catch (e) { next(e); } });
   app.use(['/api', '/admin'], (req, res, next) => { if (secure && !req.secure) return next(new AppError(400, 'HTTPS_REQUIRED', '请通过 HTTPS 访问')); next(); });

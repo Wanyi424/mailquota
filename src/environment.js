@@ -6,7 +6,7 @@ export function environment(env = process.env) {
     STORAGE_DIR: z.string().default('./storage'), PORT: z.coerce.number().int().min(1).max(65535).default(3000), HOST: z.string().default('127.0.0.1'),
     TRUST_PROXY: z.string().default('loopback'),
     ADMIN_USERNAME: z.string().min(1), ADMIN_PASSWORD_HASH: z.string().regex(/^\$2[aby]\$1[2-6]\$[./A-Za-z0-9]{53}$/),
-    SESSION_SECRET: z.string().min(43), PUBLIC_ORIGIN: z.url().refine(v => new URL(v).protocol === 'https:' && new URL(v).origin === v),
+    SESSION_SECRET: z.string().min(43), PUBLIC_ORIGIN: z.url().refine(v => ['http:', 'https:'].includes(new URL(v).protocol) && new URL(v).origin === v),
     SMTP_HOST: z.string().min(1), SMTP_PORT: z.coerce.number().int().min(1).max(65535), SMTP_SECURE: z.enum(['true', 'false']),
     SMTP_USER: z.string().min(1), SMTP_PASSWORD: z.string().min(1), SMTP_FROM: email,
   });

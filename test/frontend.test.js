@@ -34,12 +34,16 @@ test('管理页面与全部模块同源提供，HTTPS和敏感目录边界保持
   assert.match(index.headers['cache-control'], /no-store/);
   assert.match(index.headers['content-security-policy'], /script-src 'self'/);
   assert.match(index.headers['content-security-policy'], /frame-src 'self'/);
-  const modules = ['app.js', 'api.js', 'helpers.js', 'ui.js', 'default-template.js', 'pages/customers.js', 'pages/templates.js', 'pages/requests.js'];
+  const modules = ['app.js', 'api.js', 'helpers.js', 'ui.js', 'icons.js', 'default-template.js', 'pages/customers.js', 'pages/templates.js', 'pages/requests.js'];
   for (const file of modules) {
     const response = await request(f.app).get(`/admin/assets/js/${file}`);
     assert.equal(response.status, 200, file); assert.match(response.headers['content-type'], /javascript/);
   }
   assert.equal((await request(f.app).get('/admin/assets/styles.css')).status, 200);
+  const icons = await request(f.app).get('/admin/assets/icons/lucide.svg');
+  assert.equal(icons.status, 200); assert.match(icons.headers['content-type'], /image\/svg\+xml/);
+  const sprite = Buffer.isBuffer(icons.body) ? icons.body.toString('utf8') : icons.text;
+  assert.match(sprite, /<symbol id="eye"/); assert.match(sprite, /<symbol id="eye-off"/);
   for (const path of ['/config/customers.json', '/storage/data/mailquota.sqlite', '/admin/assets/.env', '/admin/assets/config/customers.json', '/templates/default.html']) assert.equal((await request(f.app).get(path)).status, 404, path);
   assert.equal((await request(f.app).get('/admin/api/customers')).status, 401);
   assert.equal((await request(secure.app).get('/admin/')).body.code, 'HTTPS_REQUIRED');

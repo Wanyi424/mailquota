@@ -1,4 +1,5 @@
 import { escapeHtml as e, number, statusLabels } from './helpers.js';
+import { icon } from './icons.js';
 
 export const $ = (selector, root = document) => root.querySelector(selector);
 export const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -6,12 +7,11 @@ export const badge = status => `<span class="badge ${e(status)}"><span class="st
 export const field = (label, control, help = '') => `<label class="field"><span class="field-label">${label}</span>${control}${help ? `<span class="field-help">${help}</span>` : ''}</label>`;
 export const input = (name, value = '', attrs = '') => `<input name="${name}" value="${e(value)}" ${attrs}>`;
 export const formError = '<div class="form-error" role="alert" hidden></div>';
-export const header = (title, description, action = '') => `<header class="page-heading"><div><h1 tabindex="-1">${e(title)}</h1><p>${e(description)}</p></div><div class="heading-actions">${action}</div></header>`;
-export const empty = (title, description, action = '') => `<div class="empty-state"><div class="empty-mark" aria-hidden="true">—</div><h2>${e(title)}</h2><p>${e(description)}</p>${action}</div>`;
+export const empty = (message, action = '') => `<div class="empty-state"><p>${e(message)}</p>${action}</div>`;
 export const loading = () => '<div class="loading-state" role="status"><span class="spinner"></span><p>正在读取数据…</p></div>';
 export function pagination(page, total, pageSize = 20) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
-  return `<div class="pagination"><span>共 ${number(total)} 条${total ? ` · ${number((page - 1) * pageSize + 1)}–${number(Math.min(page * pageSize, total))}` : ''}</span><div><button class="button small secondary" data-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>上一页</button><span>${page} / ${pages}</span><button class="button small secondary" data-page="${page + 1}" ${page >= pages ? 'disabled' : ''}>下一页</button></div></div>`;
+  return `<div class="pagination"><span>共 ${number(total)} 条${total ? ` · ${number((page - 1) * pageSize + 1)}–${number(Math.min(page * pageSize, total))}` : ''}</span><div><button class="button small secondary icon-button" aria-label="上一页" title="上一页" data-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>${icon('chevron-left')}</button><span>${page} / ${pages}</span><button class="button small secondary icon-button" aria-label="下一页" title="下一页" data-page="${page + 1}" ${page >= pages ? 'disabled' : ''}>${icon('chevron-right')}</button></div></div>`;
 }
 export function showToast(message, kind = 'success') {
   const node = document.createElement('div'); node.className = `toast ${kind}`; node.textContent = message;
@@ -35,12 +35,12 @@ export function bindSubmit(form, handler) {
     event.preventDefault(); if (form.dataset.busy === 'true' || !form.reportValidity()) return;
     clearError(form); const values = Object.fromEntries(new FormData(form));
     const controls = $$('button[type="submit"], input, select, textarea', form), disabled = controls.map(node => node.disabled);
-    const submit = $('button[type="submit"]', form), label = submit?.textContent;
+    const submit = $('button[type="submit"]', form), label = submit?.innerHTML;
     form.dataset.busy = 'true'; controls.forEach(node => { node.disabled = true; });
     if (submit) submit.textContent = form.dataset.busyLabel || '正在保存…';
     try { await handler(values, form); }
     catch (error) { showError(form, error); }
-    finally { form.dataset.busy = 'false'; controls.forEach((node, index) => { node.disabled = disabled[index]; }); if (submit) submit.textContent = label; }
+    finally { form.dataset.busy = 'false'; controls.forEach((node, index) => { node.disabled = disabled[index]; }); if (submit) submit.innerHTML = label; }
   });
 }
 export function onClick(root, selector, handler) {
@@ -62,7 +62,7 @@ export function watchForm(form, onDirty = () => {}) {
 export function modal(title, subtitle, body, { wide = false, secret = false } = {}) {
   const dialog = document.createElement('dialog'); dialog.className = `dialog ${wide ? 'wide' : ''}`;
   const titleId = `dialog-title-${crypto.randomUUID()}`; dialog.setAttribute('aria-labelledby', titleId);
-  dialog.innerHTML = `<header class="dialog-heading"><div><h2 id="${titleId}">${e(title)}</h2><p>${e(subtitle)}</p></div>${secret ? '' : '<button type="button" class="button quiet small dialog-x" aria-label="关闭窗口">关闭</button>'}</header><div class="dialog-body">${body}</div>`;
+  dialog.innerHTML = `<header class="dialog-heading"><div><h2 id="${titleId}">${e(title)}</h2>${subtitle ? `<p>${e(subtitle)}</p>` : ''}</div>${secret ? '' : `<button type="button" class="button quiet icon-button dialog-x" aria-label="关闭窗口" title="关闭窗口">${icon('x')}</button>`}</header><div class="dialog-body">${body}</div>`;
   document.body.append(dialog);
   const form = $('form', dialog), tracker = form ? watchForm(form) : null;
   const close = () => { dialog.close(); dialog.remove(); };
@@ -87,7 +87,7 @@ export function confirmDialog(title, description, label = '确认', danger = fal
   });
 }
 export async function copyText(value, button) {
-  try { await navigator.clipboard.writeText(value); const original = button.textContent; button.textContent = '已复制'; setTimeout(() => { button.textContent = original; }, 1800); }
+  try { await navigator.clipboard.writeText(value); const original = button.innerHTML; button.innerHTML = icon('check') + (button.classList.contains('icon-button') ? '' : '已复制'); showToast('已复制'); setTimeout(() => { button.innerHTML = original; }, 1800); }
   catch { showToast('无法访问剪贴板，请选中文本后手动复制。', 'error'); }
 }
 export function revealKey(customer, afterClose = () => {}) {

@@ -64,7 +64,7 @@ Nginx按实际连接来源的保护返回429 `SOURCE_RATE_LIMIT`，不依赖客�
 
 ## 管理认证
 
-单管理员独立认证，Cookie 会话绝对有效期 8 小时，重启需重登。Cookie 为 `mailquota.sid`，HttpOnly、Secure、SameSite=Strict。管理接口不接受客户密钥替代登录。
+单管理员独立认证，Cookie 会话绝对有效期 8 小时，重启需重登。Cookie 为 `mailquota.sid`，HttpOnly、SameSite=Strict；PUBLIC_ORIGIN为HTTPS时设置Secure并校验HTTPS请求，为HTTP时允许本地HTTP会话。管理接口不接受客户密钥替代登录。
 
 `POST /admin/api/login`：`{"username":"admin","password":"..."}`。需要 `Origin` 与 `PUBLIC_ORIGIN` 完全一致。成功返回 `data.username` 与 `data.csrf_token` 并设置 Cookie。同来源 15 分钟最多 10 次失败；429 `LOGIN_RATE_LIMIT`。
 

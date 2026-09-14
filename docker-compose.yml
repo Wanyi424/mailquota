@@ -6,10 +6,11 @@ services:
     env_file: .env
     environment:
       HOST: 0.0.0.0
+      PORT: 3000
       STORAGE_DIR: /app/storage
       TRUST_PROXY: loopback,uniquelocal
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3578:3000"
     volumes:
       - ./storage:/app/storage
     stop_grace_period: 25s

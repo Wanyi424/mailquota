@@ -16,11 +16,11 @@ npm run init
 npm start
 ```
 
-`npm run password` 不回显输入，生成 bcrypt 密码哈希和会话密钥。将输出填入 `.env`，再填写管理员名称、域名与 SMTP 配置。密码至少 12 字符、至多 72 字节。没有默认管理员密码、客户密钥或赠送额度。
+`npm run password` 不回显输入，自动将 bcrypt 盐哈希写入项目 `.env`，无需复制粘贴，也不保存明文密码。已有其他配置和有效会话密钥会保留；缺少会话密钥时自动生成，缺少 `.env` 时从 `.env.example` 创建。密码至少 12 字符、至多 72 字节。填写管理员名称、访问地址与 SMTP 配置后启动服务；修改密码后重启服务生效（Docker 使用 `docker compose up -d --force-recreate` 重新加载环境变量）。
 
 首次必须显式初始化。正常启动时任何必要文件缺失都会报错；不得通过再次初始化解决数据丢失。`storage/config/customers.json` 为唯一客户配置，`storage/templates` 为邮件模板，`storage/data/mailquota.sqlite` 为账本。新客户通过管理 API 创建，默认停用、额度 0。
 
-应用在生产模式强制 HTTPS 请求，Nginx 终止 TLS 并覆盖代理头。直接访问本机 HTTP 仅健康检查可用。开发联调也建议使用本地 TLS 代理；测试通过依赖注入独立关闭 HTTPS 校验，不提供生产环境跳过认证、扣量、TLS 证书校验或真实试发开关。
+`PUBLIC_ORIGIN` 支持 HTTP 和 HTTPS。本地测试设置 `PUBLIC_ORIGIN=http://localhost:3000`，启动后访问 `http://localhost:3000/admin/`，无需 HTTPS 或 Nginx。该值须与浏览器实际访问的协议、主机和端口一致，末尾不带斜杠。服务根据配置的协议自动设置会话 Cookie 和页面安全响应头；HTTPS 地址仍校验 HTTPS 请求，可由 Nginx 终止 TLS 并覆盖代理头。
 
 ## 文档
 
