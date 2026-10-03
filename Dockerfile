@@ -1,3 +1,10 @@
+FROM node:24.21.0-bookworm-slim AS frontend-build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
+COPY frontend ./frontend
+RUN npm run build:frontend
+
 FROM node:24.21.0-bookworm-slim AS dependencies
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
@@ -10,7 +17,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY src ./src
-COPY public ./public
+COPY --from=frontend-build /app/public/admin ./public/admin
 COPY scripts ./scripts
 COPY migrations ./migrations
 COPY templates ./templates

@@ -2,9 +2,9 @@
 
 独立邮件验证码与永久额度服务。按 `MAILQUOTA_DEVELOPMENT_SPEC.md` 实现，已包含独立服务后端、管理 API 与 Web 管理端；客户业务项目的接入改造仍留待后续实施。
 
-Node.js 24 LTS、Express 5、SQLite、Nodemailer；单应用进程，无 Redis、消息队列或前端构建。依赖精确版本见 `package.json` 和 `package-lock.json`。SMTP 凭据只存我方环境配置。
+Node.js 24 LTS、Express 5、SQLite、Nodemailer；单应用进程，无 Redis 或消息队列。管理端使用 React、TypeScript、Vite 和 BrowserRouter，生产阶段仍由同一个 Express 进程托管静态产物。依赖精确版本见 `package.json` 和 `package-lock.json`。SMTP 凭据只存我方环境配置。
 
-管理端使用原生 HTML、CSS、JavaScript，与接口同源。配置并启动服务后访问 `PUBLIC_ORIGIN/admin/`，使用原管理员账号登录，无额外前端服务或构建步骤。Docker 部署需重新构建镜像以包含新增的 `public` 静态文件。
+管理端源码位于 `frontend/`，使用 `npm run build:frontend` 构建到 `public/admin/`。配置并启动服务后访问 `PUBLIC_ORIGIN/admin/`，使用原管理员账号登录，无额外前端运行容器。Docker 部署需重新构建镜像以包含新的静态文件。
 
 ## 本地准备
 
@@ -34,6 +34,8 @@ npm start
 ```sh
 npm test
 npm run test:frontend
+npm run check:frontend
+npm run build:frontend
 docker build -t mailquota:local .
 node test/container-check.js
 ```

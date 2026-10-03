@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import request from 'supertest';
 import { readFileSync } from 'node:fs';
 import { fixture, origin, password } from './helpers.js';
-import { createApi, ApiError } from '../public/admin/js/api.js';
-import { quotaTarget, dateBoundary, previewDocument, validateTemplate, routeInfo } from '../public/admin/js/helpers.js';
-import { defaultTemplate, defaultText } from '../public/admin/js/default-template.js';
+import { createApi, ApiError } from '../frontend/src/api.ts';
+import { quotaTarget, dateBoundary, previewDocument, validateTemplate } from '../frontend/src/helpers.ts';
+import { defaultTemplate, defaultText } from '../frontend/src/default-template.ts';
 
 // Exercise the actual browser API module against Express + sessions + SQLite, not duplicated URLs.
 function frontend(f) {
@@ -30,16 +30,18 @@ test('管理页面与全部模块同源提供，HTTPS和敏感目录边界保持
   assert.equal((await request(f.app).get('/admin')).headers.location, '/admin/');
   const index = await request(f.app).get('/admin/');
   assert.equal(index.status, 200); assert.match(index.headers['content-type'], /text\/html/);
-  assert.match(index.text, /type="module" src="\/admin\/assets\/js\/app.js"/);
+  assert.match(index.text, /type="module"[^>]+src="\/admin\/assets\/assets\/index-[^"]+\.js"/);
   assert.match(index.headers['cache-control'], /no-store/);
   assert.match(index.headers['content-security-policy'], /script-src 'self'/);
   assert.match(index.headers['content-security-policy'], /frame-src 'self'/);
-  const modules = ['app.js', 'api.js', 'helpers.js', 'ui.js', 'icons.js', 'default-template.js', 'pages/customers.js', 'pages/templates.js', 'pages/requests.js'];
-  for (const file of modules) {
-    const response = await request(f.app).get(`/admin/assets/js/${file}`);
-    assert.equal(response.status, 200, file); assert.match(response.headers['content-type'], /javascript/);
-  }
-  assert.equal((await request(f.app).get('/admin/assets/styles.css')).status, 200);
+  const script = index.text.match(/src="([^"]+\.js)"/)?.[1];
+  const stylesheet = index.text.match(/href="([^"]+\.css)"/)?.[1];
+  assert(script); assert(stylesheet);
+  assert.equal((await request(f.app).get(script)).status, 200);
+  assert.equal((await request(f.app).get(stylesheet)).status, 200);
+  assert.equal((await request(f.app).get('/admin/customers')).status, 200);
+  assert.equal((await request(f.app).get('/admin/records?status=unknown')).status, 200);
+  assert.equal((await request(f.app).get('/admin/api/unknown')).status, 401);
   const icons = await request(f.app).get('/admin/assets/icons/lucide.svg');
   assert.equal(icons.status, 200); assert.match(icons.headers['content-type'], /image\/svg\+xml/);
   const sprite = Buffer.isBuffer(icons.body) ? icons.body.toString('utf8') : icons.text;
@@ -48,7 +50,7 @@ test('管理页面与全部模块同源提供，HTTPS和敏感目录边界保持
   assert.equal((await request(f.app).get('/admin/api/customers')).status, 401);
   assert.equal((await request(secure.app).get('/admin/')).body.code, 'HTTPS_REQUIRED');
   assert.equal((await request(secure.app).get('/admin/').set('X-Forwarded-Proto', 'https')).status, 200);
-  assert.match(readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8'), /COPY public \.\/public/);
+  assert.match(readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8'), /frontend-build/);
 });
 
 test('前端API完整管理工作流：会话、创建、版本、增额、启停、邮件、模板、密钥、退出', async t => {
@@ -126,7 +128,6 @@ test('前端额度边界、北京时间筛选、模板约束与srcdoc隔离契�
   const document = previewDocument(unsafe);
   assert(document.indexOf('Content-Security-Policy') < document.indexOf('<script>'));
   assert.match(document, /script-src 'none'/); assert.match(document, /base-uri 'none'/);
-  const source = readFileSync(new URL('../public/admin/js/pages/templates.js', import.meta.url), 'utf8');
-  assert.match(source, /sandbox="" referrerpolicy="no-referrer"/); assert.doesNotMatch(source, /allow-scripts|allow-same-origin/);
-  assert.equal(routeInfo('#/templates/a?tab=mail').query.get('tab'), 'mail');
+  const source = readFileSync(new URL('../frontend/src/pages/templates.tsx', import.meta.url), 'utf8');
+  assert.match(source, /sandbox="" referrerPolicy="no-referrer"/); assert.doesNotMatch(source, /allow-scripts|allow-same-origin/);
 });

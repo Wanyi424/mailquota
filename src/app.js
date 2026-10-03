@@ -118,6 +118,8 @@ export function createApp({ service, config, admin, secure = new URL(admin.origi
   app.get('/admin', (req, res, next) => req.path.endsWith('/') ? next() : res.redirect('/admin/'));
   app.get('/admin/', (req, res) => res.sendFile(join(adminPublic, 'index.html')));
   app.use('/admin/assets', express.static(adminPublic, { index: false, dotfiles: 'deny', redirect: false }));
+  // BrowserRouter routes are served by the same packaged entrypoint. API and asset paths stay JSON/static boundaries.
+  app.get(/^\/admin\/(?!api(?:\/|$)|assets(?:\/|$)).+$/, (req, res) => res.sendFile(join(adminPublic, 'index.html')));
   app.use((req, res) => res.status(404).json({ success: false, code: 'NOT_FOUND', message: '接口不存在' }));
   app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);

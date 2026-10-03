@@ -69,7 +69,7 @@ test('HTTP配置直接登录管理端、保持会话及CSRF，页面资源不升
   const page = await agent.get('/admin/'); assert.equal(page.status, 200);
   assert.equal(page.headers['strict-transport-security'], undefined);
   assert.doesNotMatch(page.headers['content-security-policy'], /upgrade-insecure-requests/);
-  assert.equal((await agent.get('/admin/assets/js/app.js')).status, 200);
+  assert.equal((await agent.get('/admin/customers')).status, 200);
   const login = await agent.post('/admin/api/login').set('Origin', origin).send({ username: 'admin', password });
   assert.equal(login.status, 200);
   assert.doesNotMatch(login.headers['set-cookie'][0], /; Secure/i);
