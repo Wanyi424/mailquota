@@ -1,43 +1,28 @@
 import { icon } from '../icons.js';
-import { escapeHtml as e, customerLink, templateLink, validateTemplate, previewDocument } from '../helpers.js';
-import { $, empty, field, input, formError, bindSubmit, onClick, showToast, watchForm, explainError } from '../ui.js';
+import { escapeHtml as e, validateTemplate, previewDocument } from '../helpers.js';
+import { $, field, formError, bindSubmit, onClick, showToast, watchForm, explainError } from '../ui.js';
 
-export async function templatesPage(ctx, id, tab = 'html') {
-  const customers = await ctx.allCustomers(); if (!ctx.active()) return;
-  if (!customers.length) { ctx.root.innerHTML = `<section class="panel">${empty('创建客户后即可配置邮件模板', '<a class="button secondary" href="#/customers">前往客户管理</a>')}</section>`; return; }
-  if (!id) { await ctx.navigate(templateLink(customers[0].customer_id), { replace: true }); return; }
-  const [customer, template] = await Promise.all([ctx.api.customer(id), ctx.api.template(id)]); if (!ctx.active()) return;
-  if (customer.version !== template.version) throw new Error('读取期间配置发生了变化，请重新加载以取得一致的版本。');
-  const c = customer;
-  ctx.root.innerHTML = `<div class="template-controls"><div class="selector-bar"><label for="template-customer">当前客户</label><select id="template-customer">${customers.map(item => `<option value="${e(item.customer_id)}" ${item.customer_id === id ? 'selected' : ''}>${e(item.name)} · ${e(item.customer_id)}</option>`).join('')}</select></div><nav class="tabs" aria-label="模板编辑栏目"><a href="${templateLink(id)}" class="${tab === 'mail' ? '' : 'active'}" ${tab === 'mail' ? '' : 'aria-current="page"'}>HTML 样式</a><a href="${templateLink(id)}?tab=mail" class="${tab === 'mail' ? 'active' : ''}" ${tab === 'mail' ? 'aria-current="page"' : ''}>发件信息与纯文本</a></nav><a class="button quiet small" href="${customerLink(id)}">客户详情${icon('external-link')}</a></div><div id="template-workspace"></div>`;
-  $('#template-customer', ctx.root).addEventListener('change', async event => {
-    const selected = event.target.value;
-    const moved = await ctx.navigate(`${templateLink(selected)}${tab === 'mail' ? '?tab=mail' : ''}`);
-    if (!moved && event.target.isConnected) event.target.value = id;
-  });
-  const root = $('#template-workspace', ctx.root);
-  if (tab === 'mail') renderMail(ctx, root, c);
-  else renderHtml(ctx, root, c, template.html);
+// 客户详情内的「邮件模板」栏目：HTML 与纯文本同页编辑，一个保存按钮。
+// 纯文本用于不显示 HTML 的邮件客户端作为兜底；发件昵称、标题、回复邮箱在「概览」的客户信息中维护。
+export async function templateTab(ctx, c) {
+  const template = await ctx.api.template(c.customer_id); if (!ctx.active()) return;
+  if (c.version !== template.version) throw new Error('读取期间配置发生了变化，请重新加载以取得一致的版本。');
+  ctx.root.innerHTML = `<div class="template-controls"><div class="template-help"><span>支持变量：<code>{{code}}</code> 验证码</span><span><code>{{expires_minutes}}</code> 有效分钟数</span><span>HTML 最大 256 KiB · 纯文本最大 16 KiB</span></div><div class="template-actions"><p class="save-status" data-save-status>已保存</p><button type="button" class="button secondary small" data-reload>${icon('refresh-cw')}重新加载</button><button type="submit" form="tpl-form" class="button primary small">${icon('save')}保存模板</button></div></div><div id="template-workspace"></div>`;
+  onClick(ctx.root, '[data-reload]', () => ctx.refresh());
+  renderEditor(ctx, $('#template-workspace', ctx.root), c, template.html);
 }
 
-function renderMail(ctx, root, c) {
-  root.innerHTML = `<section class="panel"><div class="panel-body"><form class="form-stack mail-form">${formError}<div class="form-grid">${field('发件昵称', input('from_name', c.from_name, 'required maxlength="100"'), '收件人看到的发件名称；实际发信地址由服务端统一配置。')}${field('回复邮箱', input('reply_to', c.reply_to, 'type="email" maxlength="254" placeholder="可选，留空使用默认设置"'))}<div class="span-full">${field('邮件标题', input('subject', c.subject, 'required maxlength="200"'), '标题为静态文本，不执行模板变量。')}</div></div>${field('纯文本正文', `<textarea name="text_template" rows="6" required spellcheck="false">${e(c.text_template)}</textarea>`, '用于不显示 HTML 的邮件客户端，必须包含 {{code}}，可使用 {{expires_minutes}}。')}<div><h3>纯文本预览</h3><pre class="plain-preview" id="text-preview"></pre></div><div class="form-footer"><p data-save-status>已保存</p><div class="button-group"><button type="button" class="button secondary" data-reload>${icon('refresh-cw')}重新加载</button><button type="submit" class="button primary">${icon('save')}保存发件信息</button></div></div></form></div></section>`;
-  const form = $('form', root), tracker = watchForm(form, dirty => { const label = $('[data-save-status]', form); label.textContent = dirty ? '有未保存的修改' : `已保存`; label.classList.toggle('unsaved', dirty); }); ctx.setDirty(tracker.dirty);
-  const updateText = () => { $('#text-preview', root).textContent = $('[name="text_template"]', form).value.replace(/{{code}}/g, '083721').replace(/{{expires_minutes}}/g, '5'); };
-  $('[name="text_template"]', form).addEventListener('input', updateText); updateText();
-  onClick(root, '[data-reload]', () => ctx.refresh());
-  bindSubmit(form, async values => {
-    validateTemplate(values.text_template, 16 * 1024);
-    if (/[\x00-\x1f\x7f]/.test(values.from_name) || /[\x00-\x1f\x7f]/.test(values.subject)) throw new Error('发件昵称和标题不能包含换行或控制字符。');
-    await ctx.api.saveMail(c.customer_id, c.version, { ...values, from_name: values.from_name.trim(), subject: values.subject.trim(), reply_to: values.reply_to.trim() });
-    tracker.reset(); showToast('发件信息与纯文本已保存。'); await ctx.refresh({ force: true });
+function renderEditor(ctx, root, c, html) {
+  root.innerHTML = `<form id="tpl-form">${formError}<div class="editor-grid"><section class="editor-pane"><div class="editor-toolbar"><h3>HTML 源码</h3></div><textarea class="code-editor" name="html" aria-label="HTML 邮件模板源码" spellcheck="false" autocapitalize="off" autocomplete="off" required>${e(html)}</textarea></section><section class="editor-pane"><div class="editor-toolbar"><h3>邮件预览</h3><div class="button-group"><button type="button" class="button quiet small icon-button" data-width aria-label="切换窄屏预览" title="切换窄屏预览" aria-pressed="false">${icon('smartphone')}</button><button type="button" class="button secondary small" data-preview>${icon('refresh-cw')}更新预览</button></div></div><div class="preview-host"><iframe class="preview-frame" title="邮件模板隔离预览" sandbox="" referrerpolicy="no-referrer"></iframe></div></section></div><div class="preview-description" data-preview-status role="status">正在准备预览…</div><section class="panel plain-panel"><div class="panel-heading"><div class="panel-title"><h2>纯文本正文</h2></div><p>兜底版本：当收件人的邮件客户端不显示 HTML 时，会改为展示这段纯文本。必须包含 {{code}}，可使用 {{expires_minutes}}；随上方 HTML 一起保存。</p></div><div class="panel-body"><div class="plain-grid">${field('纯文本正文', `<textarea name="text_template" rows="5" required spellcheck="false" aria-label="纯文本正文">${e(c.text_template)}</textarea>`)}<div><h3>纯文本预览</h3><pre class="plain-preview" id="text-preview"></pre></div></div></div></section></form>`;
+  const form = $('form', root), textarea = $('[name="html"]', form), textArea = $('[name="text_template"]', form);
+  const previewStatus = $('[data-preview-status]', form), status = $('[data-save-status]', ctx.root);
+  const tracker = watchForm(form, dirty => {
+    status.textContent = dirty ? '有未保存的修改' : '已保存'; status.classList.toggle('unsaved', dirty);
+    if (dirty) previewStatus.textContent = '源码已修改，点击「更新预览」查看效果；更新预览不会保存。';
   });
-}
-
-function renderHtml(ctx, root, c, html) {
-  root.innerHTML = `<form>${formError}<div class="editor-grid"><section class="editor-pane"><div class="editor-toolbar"><h3>HTML 源码</h3><button type="button" class="button quiet small icon-button" data-reload aria-label="重新加载源码" title="重新加载源码">${icon('refresh-cw')}</button></div><textarea class="code-editor" name="html" aria-label="HTML 邮件模板源码" spellcheck="false" autocapitalize="off" autocomplete="off" required>${e(html)}</textarea></section><section class="editor-pane"><div class="editor-toolbar"><h3>邮件预览</h3><div class="button-group"><button type="button" class="button quiet small icon-button" data-width aria-label="切换窄屏预览" title="切换窄屏预览" aria-pressed="false">${icon('smartphone')}</button><button type="button" class="button secondary small" data-preview>${icon('refresh-cw')}更新预览</button></div></div><div class="preview-host"><iframe class="preview-frame" title="邮件模板隔离预览" sandbox="" referrerpolicy="no-referrer"></iframe></div></section></div><div class="template-help"><span>支持变量：<code>{{code}}</code> 验证码</span><span><code>{{expires_minutes}}</code> 有效分钟数</span><span>HTML 最大 256 KiB</span></div><div class="preview-description" data-preview-status role="status">正在准备预览…</div><div class="form-footer"><p data-save-status>已保存</p><button type="submit" class="button primary">${icon('save')}保存 HTML 模板</button></div></form>`;
-  const form = $('form', root), textarea = $('[name="html"]', form), previewStatus = $('[data-preview-status]', form);
-  const tracker = watchForm(form, dirty => { const label = $('[data-save-status]', form); label.textContent = dirty ? '有未保存的修改' : `已保存`; label.classList.toggle('unsaved', dirty); previewStatus.textContent = '源码已修改，点击「更新预览」查看效果；更新预览不会保存。'; }); ctx.setDirty(tracker.dirty);
+  ctx.setDirty(tracker.dirty);
+  const updateText = () => { $('#text-preview', form).textContent = textArea.value.replace(/{{code}}/g, '083721').replace(/{{expires_minutes}}/g, '5'); };
+  textArea.addEventListener('input', updateText); updateText();
   let previewVersion = 0;
   async function updatePreview() {
     const seq = ++previewVersion, button = $('[data-preview]', form), source = textarea.value;
@@ -51,8 +36,14 @@ function renderHtml(ctx, root, c, html) {
     finally { if (seq === previewVersion) button.disabled = false; }
   }
   onClick(root, '[data-preview]', updatePreview);
-  onClick(root, '[data-reload]', () => ctx.refresh());
   onClick(root, '[data-width]', (_, button) => { const narrow = $('.preview-host', root).classList.toggle('mobile'); button.setAttribute('aria-pressed', String(narrow)); button.innerHTML = icon(narrow ? 'monitor' : 'smartphone'); button.title = narrow ? '切换宽屏预览' : '切换窄屏预览'; button.setAttribute('aria-label', button.title); });
-  bindSubmit(form, async values => { validateTemplate(values.html); await ctx.api.saveTemplate(c.customer_id, c.version, values.html); tracker.reset(); showToast('HTML 模板已保存。'); await ctx.refresh({ force: true }); });
+  bindSubmit(form, async values => {
+    validateTemplate(values.html);
+    validateTemplate(values.text_template, 16 * 1024);
+    // 顺序保存：HTML 先行并取回新版本号，纯文本复用当前发件信息随同一按钮提交。
+    const saved = await ctx.api.saveTemplate(c.customer_id, c.version, values.html);
+    await ctx.api.saveMail(c.customer_id, saved.version, { from_name: saved.from_name, subject: saved.subject, reply_to: saved.reply_to, text_template: values.text_template });
+    tracker.reset(); showToast('邮件模板已保存。'); await ctx.refresh({ force: true });
+  });
   void updatePreview();
 }

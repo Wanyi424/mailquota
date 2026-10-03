@@ -3,7 +3,9 @@ export const number = value => new Intl.NumberFormat('zh-CN').format(value ?? 0)
 const dateFormatter = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 export const dateTime = value => value == null ? '—' : dateFormatter.format(new Date(value));
 export const customerLink = id => `#/customers/${encodeURIComponent(id)}`;
-export const templateLink = id => `#/templates/${encodeURIComponent(id)}`;
+export const templateLink = id => `#/customers/${encodeURIComponent(id)}/template`;
+export const customerRecordsLink = id => `#/customers/${encodeURIComponent(id)}/records`;
+export const recordsLink = (status = '') => `#/records${status ? `?status=${encodeURIComponent(status)}` : ''}`;
 export const statusLabels = { accepted: '已受理', pending: '处理中', unknown: '待确认', failed: '未计费' };
 export function quotaTarget(current, increase) {
   if (!/^\d+$/.test(String(increase))) throw new Error('请输入大于 0 的整数增加量。');
