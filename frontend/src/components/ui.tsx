@@ -72,7 +72,9 @@ type ModalProps = {
 
 export function Modal({ title, subtitle, wide = false, secret = false, onClose, canClose, children }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null);
+  const returnFocus = useRef<HTMLElement | null>(document.activeElement instanceof HTMLElement ? document.activeElement : null);
   const titleId = useRef(`dialog-title-${Math.random().toString(36).slice(2)}`);
+  const subtitleId = useRef(`dialog-subtitle-${Math.random().toString(36).slice(2)}`);
   const requestClose = async () => {
     if (secret) return;
     if (canClose && !(await canClose())) return;
@@ -82,9 +84,9 @@ export function Modal({ title, subtitle, wide = false, secret = false, onClose, 
     const dialog = ref.current;
     if (!dialog) return;
     if (!dialog.open) dialog.showModal();
-    return () => { if (dialog.open) dialog.close(); };
+    return () => { if (dialog.open) dialog.close(); window.requestAnimationFrame(() => returnFocus.current?.focus()); };
   }, []);
-  return <dialog ref={ref} className={`dialog ${wide ? 'wide' : ''}`} aria-labelledby={titleId.current} onCancel={event => { event.preventDefault(); void requestClose(); }}><header className="dialog-heading"><div><h2 id={titleId.current}>{title}</h2>{subtitle ? <p>{subtitle}</p> : null}</div>{secret ? null : <button type="button" className="button quiet icon-button dialog-x" aria-label="关闭窗口" title="关闭窗口" onClick={() => void requestClose()}><Icon name="x" /></button>}</header><div className="dialog-body">{children}</div></dialog>;
+  return <dialog ref={ref} className={`dialog ${wide ? 'wide' : ''}`} aria-labelledby={titleId.current} aria-describedby={subtitle ? subtitleId.current : undefined} onCancel={event => { event.preventDefault(); void requestClose(); }}><header className="dialog-heading"><div><h2 id={titleId.current}>{title}</h2>{subtitle ? <p id={subtitleId.current}>{subtitle}</p> : null}</div>{secret ? null : <button type="button" className="button quiet icon-button dialog-x" aria-label="关闭窗口" title="关闭窗口" onClick={() => void requestClose()}><Icon name="x" /></button>}</header><div className="dialog-body">{children}</div></dialog>;
 }
 
 type ConfirmRequest = { title: string; description: string; label: string; danger: boolean; resolve: (value: boolean) => void };

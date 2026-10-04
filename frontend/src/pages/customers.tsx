@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { customerLink, customerRecordsLink, number, quotaTarget, templateLink } from '../helpers';
 import type { AdminApi, Customer } from '../types';
 import { Icon } from '../icons';
@@ -19,37 +19,49 @@ export function Metrics({ quota_total = 0, used_count = 0, reserved_count = 0, a
   return <section className="metrics" aria-label="永久额度"><div className="metric"><div className="metric-label">可用额度</div><div className="metric-value teal">{number(available_count)}<small>封</small></div>{usage}</div><div className="metric"><div className="metric-label">永久已用</div><div className="metric-value">{number(used_count)}<small>封</small></div></div><div className="metric"><div className="metric-label">发送占用</div><div className={`metric-value ${reserved_count ? 'amber' : ''}`}>{number(reserved_count)}<small>封</small></div></div><div className="metric"><div className="metric-label">永久总额度</div><div className="metric-value">{number(quota_total)}<small>封</small></div></div></section>;
 }
 
-async function loadAllCustomers(api: AdminApi) {
-  const first = await api.customers(1, 100);
-  const items = [...first.items];
-  for (let page = 2; page <= Math.ceil(first.total / 100); page += 1) items.push(...(await api.customers(page, 100)).items);
-  return items;
-}
-
 export function CustomersPage() {
   const { api, setCrumbs } = useAdmin();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>();
   const [refresh, setRefresh] = useState(0);
+  const routeCreate = location.pathname === '/customers/new';
+  const [createOpen, setCreateOpen] = useState(routeCreate);
   const [search, setSearch] = useState('');
-  const [createOpen, setCreateOpen] = useState(false);
-  const [page, setPage] = useState(1);
-  const totals = useMemo(() => customers.reduce((sum, customer) => ({ quota_total: sum.quota_total + customer.quota_total, used_count: sum.used_count + customer.used_count, reserved_count: sum.reserved_count + customer.reserved_count, available_count: sum.available_count + customer.available_count }), { quota_total: 0, used_count: 0, reserved_count: 0, available_count: 0 }), [customers]);
+  const page = Math.max(1, Number(params.get('page') || 1) || 1);
+  const [total, setTotal] = useState(0);
   const rows = useMemo(() => customers.filter(customer => `${customer.name} ${customer.customer_id}`.toLowerCase().includes(search.trim().toLowerCase())), [customers, search]);
+  const updateQuery = (changes: { page?: number }) => {
+    const next = new URLSearchParams(params);
+    if (changes.page !== undefined && changes.page > 1) next.set('page', String(changes.page)); else if (changes.page !== undefined) next.delete('page');
+    setParams(next, { replace: true });
+  };
 
   useEffect(() => { setCrumbs([{ label: '客户管理' }]); }, [setCrumbs]);
+  useEffect(() => { if (routeCreate) setCreateOpen(true); }, [routeCreate]);
   useEffect(() => {
     let active = true;
     setLoading(true); setError(undefined);
-    loadAllCustomers(api).then(value => { if (active) setCustomers(value); }).catch(value => { if (active) setError(value); }).finally(() => { if (active) setLoading(false); });
+    api.customers(page, 20).then(value => {
+      if (!active) return;
+      if (!value.items.length && value.total > 0 && page > 1) {
+        const lastPage = Math.ceil(value.total / value.page_size);
+        const next = new URLSearchParams(params);
+        if (lastPage > 1) next.set('page', String(lastPage)); else next.delete('page');
+        setParams(next, { replace: true });
+        return;
+      }
+      setCustomers(value.items); setTotal(value.total);
+    }).catch(value => { if (active) setError(value); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [api, refresh]);
-  useEffect(() => { setPage(current => Math.min(current, Math.max(1, Math.ceil(rows.length / 20)))); }, [rows.length]);
+  }, [api, page, params, refresh, setParams]);
 
-  if (loading) return <LoadingState />;
-  if (error) return <EmptyState message={explainError(error)} action={<button className="button secondary" onClick={() => setRefresh(value => value + 1)}><Icon name="refresh-cw" />重新加载</button>} />;
-  return <><Metrics {...totals} /><section className="panel" aria-label="客户列表"><div className="collection-toolbar"><div className="search-field"><Icon name="search" /><input type="search" value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} placeholder="搜索客户名称或 ID" aria-label="搜索客户名称或 ID" autoComplete="off" /></div><span className="toolbar-count">{number(customers.length)} 位客户 · {number(customers.filter(customer => customer.enabled).length)} 位已启用</span><div className="toolbar-actions"><button className="button secondary icon-button" onClick={() => setRefresh(value => value + 1)} aria-label="刷新客户" title="刷新客户"><Icon name="refresh-cw" /></button><button className="button primary" onClick={() => setCreateOpen(true)}><Icon name="plus" />新建客户</button></div></div><div id="customer-table">{rows.length === 0 ? <EmptyState message={customers.length ? '没有匹配的客户' : '暂无客户'} /> : <><div className="table-wrap"><table><thead><tr><th>客户昵称</th><th>客户 ID</th><th>状态</th><th className="numeric">可用额度</th><th className="numeric">永久已用</th><th className="numeric">占用</th><th className="numeric">总额度</th><th>操作</th></tr></thead><tbody>{rows.slice((page - 1) * 20, page * 20).map(customer => <tr key={customer.customer_id}><td><div className="customer-title"><span className="customer-initial" aria-hidden="true">{[...customer.name][0]}</span><GuardedLink className="customer-name" to={customerLink(customer.customer_id)}>{customer.name}</GuardedLink></div></td><td><span className="mono mono-cell">{customer.customer_id}</span></td><td><Badge status={customer.enabled ? 'enabled' : 'disabled'} /></td><td className={`numeric available ${isLow(customer) ? 'low' : ''}`}>{number(customer.available_count)}</td><td className="numeric">{number(customer.used_count)}</td><td className="numeric">{number(customer.reserved_count)}</td><td className="numeric muted">{number(customer.quota_total)}</td><td><div className="button-group"><GuardedLink className="text-button" to={customerLink(customer.customer_id)}>管理</GuardedLink><GuardedLink className="button quiet small" to={templateLink(customer.customer_id)}>邮件模板</GuardedLink></div></td></tr>)}</tbody></table></div><Pagination page={page} total={rows.length} onChange={setPage} /></>}</div></section>{createOpen ? <CreateCustomerModal onClose={() => setCreateOpen(false)} onCreated={() => { setRefresh(value => value + 1); }} /> : null}</>;
+  const body = error ? <div className="inline-error" role="alert"><p>{explainError(error)}</p><button className="button secondary" onClick={() => setRefresh(value => value + 1)}><Icon name="refresh-cw" />重新加载</button></div> : loading && customers.length === 0 ? <LoadingState /> : rows.length === 0 ? <EmptyState message={search ? '当前页没有匹配的客户' : '暂无客户'} /> : <div className="table-wrap"><table><thead><tr><th>客户昵称</th><th>客户 ID</th><th>状态</th><th className="numeric">可用额度</th><th className="numeric">永久已用</th><th className="numeric">占用</th><th className="numeric">总额度</th><th>操作</th></tr></thead><tbody>{rows.map(customer => <tr key={customer.customer_id}><td><div className="customer-title"><span className="customer-initial" aria-hidden="true">{[...customer.name][0]}</span><GuardedLink className="customer-name" to={customerLink(customer.customer_id)}>{customer.name}</GuardedLink></div></td><td><span className="mono mono-cell">{customer.customer_id}</span></td><td><Badge status={customer.enabled ? 'enabled' : 'disabled'} /></td><td className={`numeric available ${isLow(customer) ? 'low' : ''}`}>{number(customer.available_count)}</td><td className="numeric">{number(customer.used_count)}</td><td className="numeric">{number(customer.reserved_count)}</td><td className="numeric muted">{number(customer.quota_total)}</td><td><div className="button-group"><GuardedLink className="text-button" to={customerLink(customer.customer_id)}>管理</GuardedLink><GuardedLink className="button quiet small" to={templateLink(customer.customer_id)}>邮件模板</GuardedLink></div></td></tr>)}</tbody></table></div>;
+  const closeCreate = () => { setCreateOpen(false); if (routeCreate) navigate('/customers', { replace: true }); };
+  return <><section className={`panel${loading ? ' is-loading' : ''}`} aria-label="客户列表" aria-busy={loading}><div className="collection-toolbar"><div className="search-field"><Icon name="search" /><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="筛选当前页客户名称或 ID" aria-label="筛选当前页客户名称或 ID" autoComplete="off" /></div><span className="toolbar-count">{number(total)} 位客户 · 第 {page} 页</span><div className="toolbar-actions"><button className="button secondary icon-button" onClick={() => setRefresh(value => value + 1)} aria-label="刷新客户" title="刷新客户"><Icon name="refresh-cw" /></button><button className="button primary" onClick={() => navigate('/customers/new')}><Icon name="plus" />新建客户</button></div></div><div id="customer-table">{body}{!error && total > 0 ? <Pagination page={page} total={total} onChange={value => updateQuery({ page: value })} /> : null}</div></section>{createOpen ? <CreateCustomerModal onClose={closeCreate} onCreated={() => { setRefresh(value => value + 1); }} /> : null}</>;
 }
 
 function CreateCustomerModal({ onClose, onCreated }: { onClose: () => void; onCreated: (customer: Customer) => void }) {
@@ -93,7 +105,7 @@ export function CustomerDetailPage({ tab }: { tab: 'overview' | 'template' | 're
   if (loading) return <LoadingState />;
   if (error || !customer) return <EmptyState message={(error as { code?: string })?.code === 'CUSTOMER_NOT_FOUND' ? '客户不存在' : explainError(error)} action={<button className="button secondary" onClick={() => setRefresh(value => value + 1)}><Icon name="refresh-cw" />重新加载</button>} />;
   const tabs = [{ key: 'overview', label: '概览', to: customerLink(id) }, { key: 'template', label: '邮件模板', to: templateLink(id) }, { key: 'records', label: '发送记录', to: customerRecordsLink(id) }] as const;
-  return <><header className="page-head"><div className="identity"><span className="customer-initial" aria-hidden="true">{[...customer.name][0]}</span><div><h1>{customer.name}<Badge status={customer.enabled ? 'enabled' : 'disabled'} /></h1><div className="head-sub"><span className="mono">{customer.customer_id}</span></div></div></div><CustomerHeadActions customer={customer} onRefresh={() => setRefresh(value => value + 1)} /></header><nav className="tabs" aria-label="客户详情栏目">{tabs.map(item => <GuardedLink key={item.key} to={item.to} className={item.key === tab ? 'active' : undefined}>{item.label}</GuardedLink>)}</nav>{tab === 'overview' ? <OverviewTab customer={customer} onRefresh={() => setRefresh(value => value + 1)} /> : tab === 'template' ? <TemplateTab customer={customer} onRefresh={() => setRefresh(value => value + 1)} /> : <RecordsPage fixedCustomer={id} basePath={customerRecordsLink(id)} />}</>;
+  return <><header className="page-head"><div className="identity"><span className="customer-initial" aria-hidden="true">{[...customer.name][0]}</span><div><h1>{customer.name}<Badge status={customer.enabled ? 'enabled' : 'disabled'} /></h1><div className="head-sub"><span className="mono">{customer.customer_id}</span></div></div></div><CustomerHeadActions customer={customer} onRefresh={() => setRefresh(value => value + 1)} /></header><nav className="tabs" aria-label="客户详情栏目">{tabs.map(item => <GuardedLink key={item.key} to={item.to} className={item.key === tab ? 'active' : undefined} aria-current={item.key === tab ? 'page' : undefined}>{item.label}</GuardedLink>)}</nav>{tab === 'overview' ? <OverviewTab customer={customer} onRefresh={() => setRefresh(value => value + 1)} /> : tab === 'template' ? <TemplateTab customer={customer} onRefresh={() => setRefresh(value => value + 1)} /> : <RecordsPage fixedCustomer={id} basePath={customerRecordsLink(id)} />}</>;
 }
 
 function CustomerHeadActions({ customer, onRefresh }: { customer: Customer; onRefresh: () => void }) {

@@ -38,6 +38,7 @@ export function App({ children }: { children?: ReactNode }) {
       setSession(current);
     } catch (error) {
       if ((error as ApiError).code !== 'ADMIN_AUTH_REQUIRED') setBootError(error);
+      else setExpired(false);
       setSession(null);
     } finally {
       setBooting(false);
@@ -61,12 +62,19 @@ export function App({ children }: { children?: ReactNode }) {
 
 function LoginPage({ api, onLoggedIn }: { api: AdminApi; onLoggedIn: (session: Session) => void }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const showToast = useToast();
+  const returnTo = useMemo(() => {
+    const requested = new URLSearchParams(location.search).get('next');
+    const current = `${location.pathname}${location.search}${location.hash}`;
+    const candidate = requested || (location.pathname === '/login' ? '' : current);
+    return candidate.startsWith('/') && !candidate.startsWith('//') && !candidate.startsWith('/login') && candidate !== '/' ? candidate : '/overview';
+  }, [location.hash, location.pathname, location.search]);
   return <LoginForm initialUsername="" onSubmit={async (username, password) => {
     const logged = await api.login(username, password);
     onLoggedIn(logged);
     showToast('登录成功。');
-    navigate('/customers', { replace: true });
+    navigate(returnTo, { replace: true });
   }} />;
 }
 
@@ -120,25 +128,35 @@ function AdminLayout({ api, session, setSession, expired, setExpired, dirtyRef, 
     document.title = `${crumbs.map(crumb => crumb.label).join(' / ')} · MailQuota`;
   }, [crumbs]);
   useEffect(() => {
-    if (!location.pathname.startsWith('/customers')) setCrumbs(location.pathname.startsWith('/records') ? [{ label: '发送记录' }] : [{ label: '页面不存在' }]);
+    if (location.pathname.startsWith('/overview')) setCrumbs([{ label: '工作台' }]);
+    else if (!location.pathname.startsWith('/customers')) setCrumbs(location.pathname.startsWith('/records') ? [{ label: '发送记录' }] : [{ label: '页面不存在' }]);
     setNavOpen(false);
   }, [location.pathname]);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => document.getElementById('main')?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [location.pathname]);
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setNavOpen(false); };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, []);
 
   const value = useMemo<AdminContextValue>(() => ({ api, session, setDirty, guardedNavigate, setCrumbs, refreshPendingBadge }), [api, session, setDirty, guardedNavigate, refreshPendingBadge]);
   const logout = async () => {
     if (dirtyRef.current() && !await confirm('放弃修改并退出？', '当前未保存的内容将丢失。', '退出登录')) return;
-    try { await api.logout(); dirtyRef.current = () => false; setSession(null); setExpired(false); navigate('/', { replace: true }); showToast('已退出登录。'); }
+    try { await api.logout(); dirtyRef.current = () => false; setSession(null); setExpired(false); navigate('/login', { replace: true }); showToast('已退出登录。'); }
     catch (error) { showToast(explainError(error), 'error'); }
   };
   const closeMenu = () => setNavOpen(false);
-  const activeNavigation = location.pathname.startsWith('/records') ? 'records' : 'customers';
+  const activeNavigation = location.pathname.startsWith('/overview') ? 'overview' : location.pathname.startsWith('/records') ? 'records' : 'customers';
 
-  return <AdminContext.Provider value={value}><div className={`app-shell${navOpen ? ' nav-open' : ''}`}><button className="nav-overlay" aria-label="收起导航" onClick={closeMenu} /><aside className="sidebar"><GuardedLink className="brand" to="/customers"><span className="brand-word">MailQuota<span>.</span></span></GuardedLink><nav className="nav" aria-label="主导航"><GuardedNavLink to="/customers" active={activeNavigation === 'customers'} onClick={closeMenu}><Icon name="users" /><span>客户管理</span></GuardedNavLink><GuardedNavLink to="/records" active={activeNavigation === 'records'} onClick={closeMenu}><Icon name="send" /><span>发送记录</span>{pending > 0 ? <b className="nav-count">{pending > 99 ? '99+' : pending}</b> : null}</GuardedNavLink></nav><div className="sidebar-foot"><span className="avatar" aria-hidden="true">{[...session.username][0]?.toUpperCase() || 'A'}</span><span className="account-name">{session.username}</span><button className="button quiet icon-button" onClick={() => void logout()} aria-label="退出登录" title="退出登录"><Icon name="log-out" /></button></div></aside><header className="topbar"><div className="breadcrumb"><button className="button quiet icon-button mobile-menu" onClick={() => setNavOpen(value => !value)} aria-label="展开导航" aria-expanded={navOpen}><Icon name="menu" /></button><span>{crumbs.slice(0, -1).map((crumb, index) => <span key={`${crumb.label}-${index}`}>{crumb.to ? <GuardedLink to={crumb.to}>{crumb.label}</GuardedLink> : <span>{crumb.label}</span>}<span className="crumb-sep" aria-hidden="true">/</span></span>)}<h1 id="page-title" tabIndex={-1}>{crumbs[crumbs.length - 1]?.label || '客户管理'}</h1></span></div><div className="topbar-tools" /></header><main id="main" className="content" tabIndex={-1}>{children}</main></div>{expired ? <Modal title="登录已过期" subtitle="重新登录后可继续操作，页面中未保存的输入会保留。之前的写入不会自动重试。" secret onClose={() => setExpired(false)}><LoginForm initialUsername={session.username} compact onSubmit={async (username, password) => { const logged = await api.login(username, password); setSession(logged); setExpired(false); showToast('已重新登录，请确认数据后继续操作。'); }} /></Modal> : null}</AdminContext.Provider>;
+  return <AdminContext.Provider value={value}><div className={`app-shell${navOpen ? ' nav-open' : ''}`}><button className="nav-overlay" aria-label="收起导航" onClick={closeMenu} /><aside className="sidebar"><GuardedLink className="brand" to="/overview"><span className="brand-word">MailQuota<span>.</span></span></GuardedLink><nav className="nav" aria-label="主导航"><GuardedNavLink to="/overview" active={activeNavigation === 'overview'} onClick={closeMenu}><Icon name="monitor" /><span>工作台</span></GuardedNavLink><GuardedNavLink to="/customers" active={activeNavigation === 'customers'} onClick={closeMenu}><Icon name="users" /><span>客户管理</span></GuardedNavLink><GuardedNavLink to="/records" active={activeNavigation === 'records'} onClick={closeMenu}><Icon name="send" /><span>发送记录</span>{pending > 0 ? <b className="nav-count">{pending > 99 ? '99+' : pending}</b> : null}</GuardedNavLink></nav><div className="sidebar-foot"><span className="avatar" aria-hidden="true">{[...session.username][0]?.toUpperCase() || 'A'}</span><span className="account-name">{session.username}</span><button className="button quiet icon-button" onClick={() => void logout()} aria-label="退出登录" title="退出登录"><Icon name="log-out" /></button></div></aside><header className="topbar"><div className="breadcrumb"><button className="button quiet icon-button mobile-menu" onClick={() => setNavOpen(value => !value)} aria-label={navOpen ? '收起导航' : '展开导航'} aria-expanded={navOpen}><Icon name="menu" /></button><div className="breadcrumb-path">{crumbs.slice(0, -1).map((crumb, index) => <span key={`${crumb.label}-${index}`}>{crumb.to ? <GuardedLink to={crumb.to}>{crumb.label}</GuardedLink> : <span>{crumb.label}</span>}<span className="crumb-sep" aria-hidden="true">/</span></span>)}<h1 id="page-title" tabIndex={-1}>{crumbs[crumbs.length - 1]?.label || '工作台'}</h1></div></div><div className="topbar-tools">{pending > 0 ? <GuardedLink className="pending-link" to="/records?status=unknown"><Icon name="triangle-alert" />待确认 <b>{pending > 99 ? '99+' : pending}</b></GuardedLink> : null}</div></header><main id="main" className="content" tabIndex={-1}>{children}</main></div>{expired ? <Modal title="登录已过期" subtitle="重新登录后可继续操作，页面中未保存的输入会保留。之前的写入不会自动重试。" secret onClose={() => setExpired(false)}><LoginForm initialUsername={session.username} compact onSubmit={async (username, password) => { const logged = await api.login(username, password); setSession(logged); setExpired(false); showToast('已重新登录，请确认数据后继续操作。'); }} /></Modal> : null}</AdminContext.Provider>;
 }
 
-export function GuardedLink({ to, children, className }: { to: string; children: ReactNode; className?: string }) {
+export function GuardedLink({ to, children, className, 'aria-current': ariaCurrent }: { to: string; children: ReactNode; className?: string; 'aria-current'?: 'page' | undefined }) {
   const { guardedNavigate } = useAdmin();
-  return <Link className={className} to={to} onClick={event => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); void guardedNavigate(to); }}>{children}</Link>;
+  return <Link className={className} to={to} aria-current={ariaCurrent} onClick={event => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); void guardedNavigate(to); }}>{children}</Link>;
 }
 
 function GuardedNavLink({ to, children, active, onClick }: { to: string; children: ReactNode; active: boolean; onClick: () => void }) {

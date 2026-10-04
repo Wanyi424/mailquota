@@ -106,7 +106,7 @@ export function createApi({ fetchImpl = (...args) => fetch(...args), onExpired =
       await request('/logout', { method: 'POST', body: {} });
       csrf = '';
     },
-    customers: (page = 1, pageSize = 100) => request<CustomerPage>(`/customers?page=${page}&page_size=${pageSize}`),
+    customers: (page = 1, pageSize = 20) => request<CustomerPage>(`/customers?page=${page}&page_size=${pageSize}`),
     customer: (id: string) => request<Customer>(customerPath(id)),
     createCustomer: (body: Record<string, unknown>) => request<Customer>('/customers', { method: 'POST', body }),
     rename: (id: string, version: number, name: string) => request<Customer>(customerPath(id), { method: 'PATCH', body: { version, name } }),

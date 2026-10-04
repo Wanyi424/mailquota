@@ -27,7 +27,7 @@ npm start
 - [接口与前端接入契约](docs/API.md)：客户接口、管理会话与 CSRF、所有管理操作、错误码和预览要求。
 - [部署、备份与恢复](docs/OPERATIONS.md)：Docker、Nginx、初始化、上线与回滚。
 - [测试与验收报告](docs/VERIFICATION.md)：实际测试、资源占用与未执行项目。
-- [管理端设计、接入与手动验收](docs/FRONTEND.md)：页面结构、接口映射、13项针对性检查和手动测试清单。
+- [管理端重构方案](docs/FRONTEND_REDESIGN_PLAN.md)：目标信息架构、交互原则、视觉方向、分阶段交付和验收标准。
 
 ## 验证
 
