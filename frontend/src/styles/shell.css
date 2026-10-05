@@ -1,0 +1,191 @@
+/* ---------- 顶栏 ---------- */
+.skip-link {
+  position: fixed;
+  top: -60px;
+  left: 12px;
+  z-index: 100;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-weight: 600;
+  text-decoration: none;
+  transition: top .15s;
+}
+.skip-link:focus { top: 12px; }
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  backdrop-filter: blur(14px) saturate(1.4);
+  view-transition-name: topbar;
+}
+.topbar__inner {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  max-width: var(--page);
+  height: 60px;
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+
+.brand { display: inline-flex; align-items: center; flex: none; gap: 10px; color: var(--ink); text-decoration: none; }
+.brand__word { font-size: 17px; font-weight: 800; font-stretch: 116%; letter-spacing: -.02em; line-height: 1; }
+
+.topnav { display: flex; align-self: stretch; gap: 2px; }
+.topnav a {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  color: var(--muted);
+  font-size: 14.5px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color .14s;
+}
+/* 当前项只换颜色、加下划线，不加粗：字重一变，后面的项就会被推着挪位置。 */
+.topnav a:hover, .topnav a.is-active { color: var(--ink); }
+.topnav a.is-active::after,
+.tabs__item.is-active::after {
+  content: '';
+  position: absolute;
+  right: 12px;
+  bottom: -1px;
+  left: 12px;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--nav-mark);
+}
+
+/* 看起来像输入框的按钮：点开或按 Ctrl+K 进入搜索面板。 */
+.searchbox {
+  display: flex;
+  align-items: center;
+  flex: 0 1 320px;
+  gap: 10px;
+  min-width: 0;
+  height: 36px;
+  margin-left: auto;
+  padding: 0 8px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: border-color .14s, color .14s;
+}
+.searchbox:hover { border-color: var(--line-strong); color: var(--ink-soft); }
+.searchbox__text { flex: 1; min-width: 0; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+
+.topbar__tools { display: flex; align-items: center; flex: none; gap: 2px; }
+.account { display: flex; align-items: center; gap: 8px; padding: 0 6px 0 10px; color: var(--ink-soft); font-size: 13.5px; }
+.account__name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.page { max-width: var(--page); margin: 0 auto; padding: 36px var(--gutter) 96px; outline: none; }
+
+.splash {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 18px;
+  min-height: 100dvh;
+  padding: 24px;
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+}
+.splash p { max-width: 30em; }
+
+@media (max-width: 760px) {
+  .topbar__inner { gap: 6px; }
+  /* 窄屏的顶栏放不下图标加文字，导航只留文字。 */
+  .brand__word, .searchbox__text, .searchbox .kbd, .account, .topnav .icon { display: none; }
+  .searchbox { flex: none; justify-content: center; width: 38px; height: 38px; padding: 0; border-color: transparent; background: none; }
+  .topnav a { padding: 0 10px; }
+  .page { padding-top: 24px; }
+}
+
+/* ---------- 登录页 ---------- */
+.login { display: flex; flex-direction: column; min-height: 100dvh; }
+.login__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 20px var(--gutter);
+}
+.login__bar .brand__word { display: inline; font-size: 19px; }
+.login__stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 400px);
+  align-items: center;
+  flex: 1;
+  gap: clamp(32px, 6vw, 96px);
+  width: 100%;
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 24px var(--gutter) 88px;
+}
+.login__poster > * { animation: rise .7s var(--ease) both; }
+.login__poster > :nth-child(2) { animation-delay: .08s; }
+.login__poster > :nth-child(3) { animation-delay: .18s; }
+.login__poster > :nth-child(4) { animation-delay: .28s; }
+.login__headline {
+  margin: 18px 0 44px;
+  font-size: clamp(40px, 6.6vw, 80px);
+  font-weight: 800;
+  line-height: 1.14;
+}
+.login__headline mark {
+  padding: 0 .1em;
+  border-radius: .1em;
+  background: var(--lime);
+  color: var(--on-lime);
+}
+.login__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+  margin: 34px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 14px;
+}
+.login__facts li::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+}
+.login__card {
+  padding: 32px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(10px);
+  animation: rise .7s .2s var(--ease) both;
+}
+.login__card h2 { margin-bottom: 22px; font-size: 22px; }
+.login__help { margin-top: 20px; color: var(--muted); font-size: 13px; line-height: 1.7; }
+
+@media (max-width: 860px) {
+  .login__stage { grid-template-columns: minmax(0, 1fr); align-content: start; padding-bottom: 48px; }
+  .login__headline { margin-bottom: 28px; }
+  .login__card { padding: 24px 20px; }
+}

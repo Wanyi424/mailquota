@@ -13,6 +13,8 @@ export const fields = {
 export const createSchema = z.object({ customer_id: customerId, ...fields, quota_total: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).default(0), enabled: z.boolean().default(false), html: htmlSchema }).strict();
 export const customerSchema = z.object({ customer_id: customerId, ...fields, api_key: z.string().regex(/^[A-Za-z0-9_-]{43,}$/), enabled: z.boolean(), quota_total: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), html_template: z.string().regex(/^[A-Za-z0-9_-]+\.html$/), version: z.number().int().positive().default(1) }).strict();
 export const version = z.number().int().positive();
+// 管理端一次提交任意若干项，未出现的字段保持不变。
+export const updateSchema = z.object({ version, ...z.object({ ...fields, enabled: z.boolean(), quota_total: customerSchema.shape.quota_total, html: htmlSchema }).partial().shape }).strict().refine(v => Object.keys(v).length > 1);
 export const sendSchema = z.object({ request_id: requestId, email, client_ip: z.string().max(64).refine(v => !v.includes('%') && (ipaddr.IPv4.isValidFourPartDecimal(v) || (v.includes(':') && ipaddr.IPv6.isValid(v)))).transform(v => ipaddr.process(v).toString()) }).strict();
 export const verifySchema = z.object({ email, code: z.string().regex(/^\d{6}$/) }).strict();
 export const render = (value, code = '083721') => value.replace(/{{code}}/g, code).replace(/{{expires_minutes}}/g, '5');

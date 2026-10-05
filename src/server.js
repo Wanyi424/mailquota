@@ -11,7 +11,7 @@ try {
   const db = openDatabase(join(env.root, 'data', 'mailquota.sqlite'));
   const config = new ConfigStore(env.root, db);
   const service = new MailService(db, config, createMailer(env.smtp), { logger });
-  const app = createApp({ service, config, admin: env.admin, trustProxy: env.trustProxy, logger });
+  const app = createApp({ service, config, admin: env.admin, sender: env.smtp.from, trustProxy: env.trustProxy, logger });
   const cleanup = setInterval(() => { try { service.cleanup(); } catch { logger({ event: 'cleanup_failed' }); } }, 3600000); cleanup.unref();
   const server = app.listen(env.port, env.host, () => logger({ event: 'listening', port: env.port }));
   server.requestTimeout = 25000; server.headersTimeout = 10000;

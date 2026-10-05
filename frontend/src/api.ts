@@ -1,4 +1,4 @@
-import type { AdminApi, Customer, CustomerPage, RequestFilters, RequestPage, RequestRow, Session, Template } from './types';
+import type { AdminApi, Customer, CustomerDetail, CustomerSecret, RequestFilters, RequestPage, RequestRow, Session, Stats } from './types';
 
 export class ApiError extends Error {
   code: string;
@@ -35,10 +35,10 @@ type ApiResponse<T> = {
 export function createApi({ fetchImpl = (...args) => fetch(...args), onExpired = () => {}, timeout = 20000 }: ApiOptions = {}): AdminApi {
   let csrf = '';
 
-  async function request<T>(path: string, { method = 'GET', body, html = false }: { method?: string; body?: unknown; html?: boolean } = {}): Promise<T> {
+  async function request<T>(path: string, { method = 'GET', body }: { method?: string; body?: unknown } = {}): Promise<T> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
-    const headers: Record<string, string> = { Accept: html ? 'text/html, application/json' : 'application/json' };
+    const headers: Record<string, string> = { Accept: 'application/json' };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (method !== 'GET' && csrf) headers['X-CSRF-Token'] = csrf;
 
@@ -51,7 +51,6 @@ export function createApi({ fetchImpl = (...args) => fetch(...args), onExpired =
         signal: controller.signal,
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
-      if (html && response.ok && response.headers.get('content-type')?.includes('text/html')) return await response.text() as T;
 
       let result: ApiResponse<T>;
       try {
@@ -79,6 +78,7 @@ export function createApi({ fetchImpl = (...args) => fetch(...args), onExpired =
       return result.data;
     } catch (error) {
       if (error instanceof ApiError) throw error;
+      // 写操作绝不自动重试：请求可能已经生效，只是响应没有回来。
       throw new ApiError(
         method === 'GET'
           ? '连接超时或网络中断，暂时无法读取数据。请检查连接后重试。'
@@ -90,38 +90,30 @@ export function createApi({ fetchImpl = (...args) => fetch(...args), onExpired =
   }
 
   const customerPath = (id: string) => `/customers/${encodeURIComponent(id)}`;
+  const remember = (session: Session) => {
+    csrf = session.csrf_token;
+    return session;
+  };
 
   return {
-    async session(): Promise<Session> {
-      const data = await request<Session>('/session');
-      csrf = data.csrf_token;
-      return data;
-    },
-    async login(username: string, password: string): Promise<Session> {
-      const data = await request<Session>('/login', { method: 'POST', body: { username, password } });
-      csrf = data.csrf_token;
-      return data;
-    },
+    session: async () => remember(await request<Session>('/session')),
+    login: async (username, password) => remember(await request<Session>('/login', { method: 'POST', body: { username, password } })),
     async logout() {
       await request('/logout', { method: 'POST', body: {} });
       csrf = '';
     },
-    customers: (page = 1, pageSize = 20) => request<CustomerPage>(`/customers?page=${page}&page_size=${pageSize}`),
-    customer: (id: string) => request<Customer>(customerPath(id)),
-    createCustomer: (body: Record<string, unknown>) => request<Customer>('/customers', { method: 'POST', body }),
-    rename: (id: string, version: number, name: string) => request<Customer>(customerPath(id), { method: 'PATCH', body: { version, name } }),
-    setEnabled: (id: string, version: number, enabled: boolean) => request<Customer>(`${customerPath(id)}/enabled`, { method: 'PUT', body: { version, enabled, confirmed: true } }),
-    resetKey: (id: string, version: number) => request<Customer>(`${customerPath(id)}/key/reset`, { method: 'POST', body: { version, confirmed: true } }),
-    setQuota: (id: string, version: number, quotaTotal: number) => request<Customer>(`${customerPath(id)}/quota`, { method: 'PUT', body: { version, quota_total: quotaTotal } }),
-    saveMail: (id: string, version: number, body: { from_name: string; subject: string; reply_to: string; text_template: string }) => request<Customer>(`${customerPath(id)}/mail`, { method: 'PUT', body: { version, from_name: body.from_name, subject: body.subject, reply_to: body.reply_to, text_template: body.text_template } }),
-    template: (id: string) => request<Template>(`${customerPath(id)}/template`),
-    saveTemplate: (id: string, version: number, html: string) => request<{ version: number }>(`${customerPath(id)}/template`, { method: 'PUT', body: { version, html } }),
-    preview: (html: string) => request<string>('/template/preview', { method: 'POST', body: { html }, html: true }),
+    customers: async () => (await request<{ items: Customer[] }>('/customers')).items,
+    customer: id => request<CustomerDetail>(customerPath(id)),
+    createCustomer: input => request<CustomerSecret>('/customers', { method: 'POST', body: input }),
+    updateCustomer: (id, version, changes) => request<CustomerDetail>(customerPath(id), { method: 'PATCH', body: { version, ...changes } }),
+    resetKey: (id, version) => request<CustomerSecret>(`${customerPath(id)}/key`, { method: 'POST', body: { version } }),
+    stats: (days = 14) => request<Stats>(`/stats?days=${days}`),
     requests: (filters: RequestFilters) => {
       const query = new URLSearchParams();
       for (const [key, value] of Object.entries(filters)) if (value !== '' && value !== undefined && value !== null) query.set(key, String(value));
       return request<RequestPage>(`/requests?${query}`);
     },
-    resolve: (id: number, status: 'accepted' | 'failed', note: string) => request<RequestRow>(`/requests/${encodeURIComponent(id)}/resolve`, { method: 'POST', body: { status, note, confirmed: true } }),
+    request: id => request<RequestRow>(`/requests/${encodeURIComponent(id)}`),
+    resolve: (id, status, note = '') => request<RequestRow>(`/requests/${encodeURIComponent(id)}/resolve`, { method: 'POST', body: { status, note } }),
   };
 }

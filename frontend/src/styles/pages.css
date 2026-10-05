@@ -1,0 +1,325 @@
+/* ---------- 总览 ---------- */
+.home-head { display: grid; gap: 0; margin-bottom: 24px; }
+.home-head .skeleton + .skeleton { margin-top: 16px; }
+.hero-empty { max-width: 620px; padding: 8vh 0; }
+.hero-empty .lead { margin: 14px 0 28px; }
+
+.attention { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.attention__item {
+  --tone: var(--warn-fill);
+  --tone-text: var(--warn);
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px 12px 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.attention__item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  background: var(--tone);
+}
+.attention__item--danger { --tone: var(--danger-fill); --tone-text: var(--danger); }
+.attention__item--info { --tone: var(--info); --tone-text: var(--info); }
+.attention__label {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone) 16%, transparent);
+  color: var(--tone-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.attention__text { font-size: 14.5px; }
+.attention__text b { font-weight: 600; }
+
+/* 客户列表：谁、还剩多少、还能用多久，三列各管一件事。 */
+.customer-row { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.45fr) minmax(0, .85fr) 16px; }
+a.customer-row { min-height: 76px; }
+.customer-row.is-off .quota-cell__line b, .customer-row.is-off .runway b { color: var(--muted); }
+
+.who { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.who__avatar { position: relative; flex: none; }
+/* 头像角上的小圆点就是运行状态：绿色在运行，灰色已停用。外圈与底色同色，把它从头像上「切」出来。 */
+.who__avatar .led { position: absolute; right: -2px; bottom: -2px; width: 10px; height: 10px; box-shadow: 0 0 0 2px var(--surface); }
+.who__text { display: grid; gap: 1px; min-width: 0; }
+.who__name { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 15.5px; font-weight: 600; }
+.who__name > span:first-child, .who__id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who__id { color: var(--muted); font-size: 12.5px; }
+
+.quota-cell { display: grid; gap: 8px; min-width: 0; }
+.quota-cell__line { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.quota-cell__line b { font-size: 17px; font-weight: 700; font-stretch: 108%; line-height: 22px; }
+.quota-cell__line > span { color: var(--muted); font-size: 13px; }
+.quota-cell__line .tag { align-self: center; margin-left: 4px; }
+.quota-cell .meter__track { height: 8px; border-radius: 4px; }
+
+.runway { display: grid; gap: 2px; min-width: 0; }
+.runway b { font-size: 15px; font-weight: 600; line-height: 22px; }
+.runway span { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.runway--low b { color: var(--warn); }
+.runway--empty b { color: var(--danger); }
+
+/* ---------- 客户页 ---------- */
+.workspace-head { display: flex; align-items: center; flex-wrap: wrap; gap: 16px 18px; margin-bottom: 22px; }
+.workspace-head__main { flex: 1 1 260px; min-width: 0; }
+.workspace-head__meta { display: flex; align-items: center; gap: 4px; height: 30px; color: var(--muted); font-size: 13.5px; }
+.workspace-head__actions { display: flex; align-items: center; gap: 18px; }
+.workspace-head .switch input:not(:checked) ~ .switch__label { color: var(--muted); }
+
+/*
+ * 客户名称。显示和编辑两种状态共用这一行：行高固定，标题和输入框字号相同，
+ * 所以点铅笔进入编辑、保存或取消，这一行和它下面的内容都不会移动。
+ */
+.title { display: flex; align-items: center; gap: 4px; height: 40px; min-width: 0; font-size: 28px; font-weight: 700; line-height: 40px; }
+.title__text { min-width: 0; font: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.title .btn { flex: none; color: var(--faint); }
+.title .btn:hover { color: var(--ink); }
+.title__sizer { display: inline-grid; flex: 0 1 auto; min-width: 2em; overflow: hidden; }
+.title__sizer::after { content: attr(data-value) ' '; grid-area: 1 / 1; visibility: hidden; white-space: pre; }
+.title__input {
+  grid-area: 1 / 1;
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  background: none;
+  box-shadow: inset 0 -2px 0 var(--accent);
+  color: inherit;
+}
+
+.tabs { display: flex; gap: 2px; margin-bottom: 26px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.tabs__item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 14px 12px;
+  color: var(--muted);
+  font-size: 14.5px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color .14s;
+}
+.tabs__item:hover, .tabs__item.is-active { color: var(--ink); }
+.tabs + .notice { margin-bottom: 16px; }
+
+.overview { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; }
+.overview > .notice, .overview > .trend { grid-column: 1 / -1; }
+.overview > :nth-child(2) { --order: 1; }
+.overview > .trend { --order: 2; }
+.quota-panel { display: flex; flex-direction: column; gap: 18px; padding: 22px 26px 24px; }
+.quota-panel .panel__head { margin-bottom: 0; }
+/* 面板被同一行的另一块拉高时，预估这句话留在底部。 */
+.quota-panel .forecast { margin-top: auto; }
+.split { display: flex; flex-wrap: wrap; gap: 8px 40px; margin: 0; }
+.split dt { display: flex; align-items: center; gap: 2px; min-height: 22px; color: var(--muted); font-size: 12.5px; }
+.split dd { margin: 0; font-size: 18px; font-weight: 700; font-stretch: 108%; font-variant-numeric: tabular-nums; line-height: 1.3; }
+
+.mini-records { margin: 0 -10px; padding: 0; list-style: none; }
+.mini-records a {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  color: inherit;
+  font-size: 13.5px;
+  text-decoration: none;
+  transition: background .12s;
+}
+.mini-records a:hover, .mini-records a.is-open { background: var(--hover); }
+.mini-records .status { justify-self: start; }
+.mini-records .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-records time { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+
+/* ---------- 邮件 ---------- */
+.email { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 16px; padding-bottom: 72px; }
+.email__editor { display: grid; gap: 16px; min-width: 0; }
+.email__preview { position: sticky; top: 76px; min-width: 0; }
+.email__vars { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; color: var(--muted); font-size: 12.5px; }
+.editor {
+  min-height: 440px;
+  padding: 14px 16px;
+  background: var(--code-bg);
+  font: 400 13px/1.75 var(--font-mono);
+  font-variant-ligatures: none;
+  tab-size: 2;
+  resize: vertical;
+}
+.editor.is-invalid { border-color: var(--danger); }
+.email__status { display: flex; justify-content: space-between; gap: 12px; min-height: 20px; margin-top: 8px; font-size: 12.5px; line-height: 20px; }
+.email__problem { min-width: 0; color: var(--danger); }
+
+/* 仿收件箱的预览。邮件永远是浅色画布，所以这里的颜色不跟随主题。 */
+.mail {
+  max-width: 100%;
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  color: #1b1f1d;
+  overflow: hidden;
+  transition: max-width .35s var(--ease);
+}
+.mail--mobile { max-width: 380px; }
+.mail__head { display: flex; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #e7e7e2; background: #fafaf7; }
+.mail__head .avatar { width: 36px; height: 36px; border-radius: 50%; background: #1b1f1d; color: #fff; font-size: 14px; }
+.mail__meta { flex: 1; min-width: 0; }
+.mail__meta p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail__from { font-size: 13.5px; }
+.mail__from b { font-weight: 600; }
+.mail__from span { margin-left: 6px; color: #7a827d; font-size: 12.5px; }
+.mail__subject { font-size: 15px; font-weight: 700; }
+.mail__to { color: #7a827d; font-size: 12px; }
+.mail__body { display: block; width: 100%; height: min(560px, 62vh); border: 0; background: #fff; color-scheme: light; }
+.mail__body--text {
+  margin: 0;
+  padding: 20px;
+  color: #1b1f1d;
+  font: 400 14px/1.7 var(--font-sans);
+  white-space: pre-wrap;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+.savebar {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  z-index: 15;
+  display: grid;
+  gap: 10px;
+  width: min(560px, calc(100vw - 24px));
+  padding: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-pop);
+  translate: -50% 0;
+  animation: toast-in .3s cubic-bezier(.2, .9, .2, 1.1) both;
+}
+.savebar__row { display: flex; align-items: center; gap: 8px; }
+.savebar__state { display: flex; align-items: center; flex: 1; gap: 12px; min-width: 0; padding-left: 10px; font-size: 14px; font-weight: 500; }
+
+/* ---------- 接入 ---------- */
+.access { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.access > :nth-child(2) { --order: 1; }
+.access .notice { margin-bottom: 8px; }
+.access .kv + .code { margin-top: 12px; }
+/* 刚生成的完整密钥像被荧光笔划过，和平时的掩码一眼分得开。 */
+.kv .is-fresh .mono { background: linear-gradient(transparent 55%, var(--marker) 55%); font-weight: 600; }
+.access__reset { --order: 2; grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 14px 24px; }
+.access__reset > div { flex: 1 1 320px; }
+.access__reset h2 { font-size: 16px; }
+.access__reset p { margin-top: 4px; color: var(--muted); font-size: 13.5px; }
+
+/* ---------- 发送记录 ---------- */
+/* 工具栏：搜索框吃掉剩余宽度，其余控件宽度固定；筛选怎么变，这一行都不动。 */
+.toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.toolbar .search { flex: 1 1 260px; }
+.toolbar__select { flex: none; width: 132px; }
+.toolbar__select--wide { width: 168px; }
+.toolbar__range { width: 190px; }
+
+.range { width: 320px; max-width: calc(100vw - 32px); }
+.range__custom { display: grid; gap: 8px; margin-top: 6px; padding: 12px 10px 6px; border-top: 1px solid var(--line); }
+.range__label { display: flex; align-items: center; justify-content: space-between; height: 20px; color: var(--muted); font-size: 12.5px; }
+.range__custom.is-picked .range__label { color: var(--ink); font-weight: 600; }
+.range__label .icon { color: var(--accent); }
+.range__inputs { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.range__inputs .input { flex: 1; min-width: 0; }
+.range__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 30px; color: var(--danger); font-size: 12.5px; }
+
+.record-row { grid-template-columns: 96px minmax(0, 1.7fr) minmax(0, 1fr) minmax(0, 1fr) 128px 16px; padding-block: 12px; font-size: 14px; }
+.record-row--scoped { grid-template-columns: 96px minmax(0, 1.9fr) minmax(0, 1fr) 128px 16px; }
+.record-row.trow--head { padding-block: 7px; font-size: 12.5px; }
+.record-row .status { justify-self: start; }
+.record__email, .record__customer, .record__note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.record__customer { color: var(--ink-soft); font-size: 13.5px; }
+.record__note { color: var(--muted); font-size: 13px; }
+.record__time { justify-content: flex-end; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.records__skeleton { display: grid; gap: 16px; padding: 18px 20px; }
+.pager { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-top: 14px; color: var(--muted); font-size: 13px; }
+.pager__buttons { display: flex; gap: 8px; }
+
+/* 抽屉：先结论，后明细。 */
+.record-hero { display: grid; justify-items: start; gap: 10px; padding-bottom: 22px; }
+.record-hero__email { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 20px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.record-hero__email .mono { font-size: 1em; }
+.record-hero__story { color: var(--ink-soft); font-size: 14.5px; line-height: 1.7; }
+.record-hero__caveat { margin-top: -6px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.kv--detail { border-top: 1px solid var(--line); }
+
+.resolve {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 22px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--warn-fill) 45%, transparent);
+  border-radius: 14px;
+  background: var(--warn-soft);
+}
+.resolve > header p { margin-top: 4px; color: var(--ink-soft); font-size: 13.5px; line-height: 1.65; }
+.resolve__choices { display: grid; gap: 8px; }
+.resolve__choice {
+  display: grid;
+  gap: 3px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .14s, box-shadow .14s;
+}
+.resolve__choice strong { font-size: 14.5px; font-weight: 600; }
+.resolve__choice span { color: var(--muted); font-size: 13px; line-height: 1.55; }
+.resolve__choice:hover { border-color: var(--ink); }
+.resolve__choice.is-picked { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+@media (max-width: 980px) {
+  .email { grid-template-columns: minmax(0, 1fr); }
+  .email__preview { position: static; }
+}
+@media (max-width: 900px) {
+  .overview, .access { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  /* 窄屏下表头收起，一行拆成上下几段。 */
+  .trow--head { display: none; }
+  .customer-row { grid-template-columns: minmax(0, 1fr) 16px; gap: 12px; padding-block: 16px; }
+  .customer-row .quota-cell, .customer-row .runway { grid-column: 1 / -1; }
+  .customer-row > .icon { grid-area: 1 / 2; }
+  .runway { display: flex; align-items: baseline; gap: 8px; }
+  .record-row, .record-row--scoped { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; }
+  .record-row .status { grid-area: 1 / 1; }
+  .record__time { grid-area: 1 / 2; }
+  .record__email { grid-area: 2 / 1 / 3 / 3; }
+  .record__customer, .record__note, .record-row > .icon { display: none; }
+  .workspace-head__actions { justify-content: space-between; width: 100%; }
+  .title { font-size: 24px; }
+}
+@media (max-width: 640px) {
+  .attention__item { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 14px 14px 14px 20px; }
+  .attention__label, .attention__action { justify-self: start; }
+  .quota-panel { padding: 18px 16px 20px; }
+  .drawer__body { padding: 20px 16px 32px; }
+  .toolbar .search { flex-basis: 100%; }
+  .toolbar__select, .toolbar__select--wide, .toolbar__range { flex: 1 1 132px; width: auto; }
+}

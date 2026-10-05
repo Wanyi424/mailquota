@@ -1,0 +1,162 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+* { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scrollbar-gutter: stable;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 15px/1.6 var(--font-sans);
+  font-synthesis-style: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* 氛围层：右上角一抹荧光，加一层坐标纸般的点阵。固定在视口上，滚动时不重绘。 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(64rem 30rem at 86% -10%, var(--glow), transparent 70%),
+    radial-gradient(circle at 1px 1px, var(--grid) 1px, transparent 0) 0 0 / 24px 24px;
+}
+
+h1, h2, h3, p { margin: 0; }
+h1 { font-size: 28px; line-height: 1.25; font-weight: 700; }
+h2 { font-size: 17px; line-height: 1.4; font-weight: 700; }
+h3 { font-size: 15px; line-height: 1.4; font-weight: 700; }
+
+button, input, select, textarea { font: inherit; color: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+a { color: var(--accent); -webkit-tap-highlight-color: transparent; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+::selection { background: var(--lime); color: var(--on-lime); }
+[hidden] { display: none !important; }
+
+code, .mono {
+  font-family: var(--font-mono);
+  font-size: .92em;
+  font-variant-ligatures: none;
+}
+code {
+  padding: .12em .42em;
+  border-radius: 6px;
+  background: var(--hover);
+  overflow-wrap: anywhere;
+}
+
+.icon { flex: none; display: inline-block; vertical-align: middle; pointer-events: none; }
+.brand-mark { flex: none; display: block; }
+.brand-mark__bg { fill: var(--mark-bg); }
+.brand-mark__track, .brand-mark__reading { fill: none; stroke-width: 2.4; stroke-linecap: round; }
+.brand-mark__track { stroke: var(--mark-track); }
+.brand-mark__reading { stroke: var(--lime); }
+.brand-mark__pivot { fill: var(--lime); }
+.muted { color: var(--muted); }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.link:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* 小号的等宽标注行，用在页眉、图表坐标这类「仪表刻字」的位置。 */
+.eyebrow {
+  margin: 0;
+  color: var(--muted);
+  font: 500 12.5px/1.5 var(--font-mono);
+  letter-spacing: .06em;
+}
+.eyebrow--caps { text-transform: uppercase; letter-spacing: .14em; }
+
+.headline {
+  margin-top: 10px;
+  font-size: clamp(28px, 4.4vw, 46px);
+  line-height: 1.22;
+  font-weight: 700;
+  text-wrap: balance;
+}
+/* 标题里的数字像被荧光笔划过。 */
+.headline b {
+  padding: 0 .12em;
+  background: linear-gradient(transparent 58%, var(--marker) 58%);
+  font-weight: 800;
+  font-stretch: 112%;
+  font-variant-numeric: tabular-nums;
+}
+.headline .led { margin: 0 .36em .16em .12em; vertical-align: middle; }
+
+.lead { color: var(--muted); font-size: 15.5px; line-height: 1.7; max-width: 44em; }
+
+.page-head { margin-bottom: 24px; }
+.page-head h1 { font-size: 30px; }
+.page-head .lead { margin-top: 8px; }
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 18px;
+  color: var(--muted);
+  font-size: 13.5px;
+  text-decoration: none;
+  transition: color .14s, gap .14s;
+}
+.back:hover { color: var(--ink); gap: 9px; }
+
+.section { margin-top: 20px; }
+
+/* 页面内容分层浮现，--order 决定先后。 */
+.reveal {
+  animation: rise .55s var(--ease) both;
+  animation-delay: calc(var(--order, 0) * 70ms);
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(12px); }
+}
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { to { background-position: -300% 0; } }
+
+/* 路由切换：旧页面淡出，新页面略微上浮淡入；顶栏单独成组，切换时保持不动。 */
+::view-transition-old(root) { animation: fade-out .14s ease both; }
+::view-transition-new(root) { animation: rise .28s var(--ease) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    transition-delay: 0s !important;
+  }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}

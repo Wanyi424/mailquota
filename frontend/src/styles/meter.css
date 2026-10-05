@@ -1,0 +1,144 @@
+/* ---------- 读数：滚轮数字 ---------- */
+.readout {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  font-size: 40px;
+  font-weight: 800;
+  font-stretch: 118%;
+  letter-spacing: -.02em;
+  line-height: 1.1;
+}
+.readout--hero { font-size: clamp(48px, 6.4vw, 76px); }
+.readout__unit { color: var(--muted); font-size: 14px; font-weight: 500; font-stretch: 100%; letter-spacing: 0; }
+.readout--hero .readout__unit { font-size: 17px; }
+
+.odometer { display: inline-block; }
+.odometer__row { display: inline-flex; align-items: flex-start; font-variant-numeric: tabular-nums lining-nums; }
+.odometer__strut { width: 0; line-height: 1.1; visibility: hidden; }
+.odometer__digit { height: 1.1em; overflow: hidden; }
+.odometer__sep { height: 1.1em; line-height: 1.1; }
+.odometer__reel {
+  display: flex;
+  flex-direction: column;
+  transform: translateY(calc(var(--digit) * -10%));
+  /* 个位先动，高位依次跟上。 */
+  transition: transform .95s cubic-bezier(.16, .84, .26, 1) calc((var(--place) - 1) * 45ms);
+}
+.odometer__reel > span { display: block; height: 1.1em; line-height: 1.1; text-align: center; }
+/* 首次出现时从 0 滚到实际读数。 */
+@starting-style {
+  .odometer__reel { transform: translateY(0); }
+}
+
+/* ---------- 额度条 ---------- */
+/* 只有两部分：亮起的是还能用的，其余是已经用掉的。 */
+.meter { --fill-a: var(--meter-a); --fill-b: var(--meter-b); }
+.meter__track {
+  display: flex;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--meter-track);
+  box-shadow: inset 0 0 0 1px var(--line);
+  overflow: hidden;
+}
+.meter__fill { position: relative; flex: none; height: 100%; background: linear-gradient(90deg, var(--fill-a), var(--fill-b)); transition: width .9s var(--ease); }
+/* 首次出现时从 0 涨到实际位置。 */
+@starting-style {
+  .meter__fill { width: 0 !important; }
+}
+.meter--low { --fill-a: var(--warn-fill); --fill-b: var(--warn-fill); }
+.meter--empty .meter__track { background: var(--danger-soft); box-shadow: inset 0 0 0 1px var(--danger-fill); }
+.meter--unset .meter__track { background: repeating-linear-gradient(90deg, var(--line-strong) 0 6px, transparent 6px 12px); box-shadow: none; }
+
+/* 大号的条把剩余比例直接写在亮起的那一段末尾；那一段太短时，字写在它右边的空处。 */
+.meter--large .meter__track { height: 26px; border-radius: 9px; }
+.meter__label {
+  position: absolute;
+  top: 0;
+  right: 10px;
+  color: var(--on-lime);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 26px;
+  white-space: nowrap;
+}
+.meter__label--outside { right: auto; left: calc(100% + 10px); color: var(--ink-soft); }
+.meter--empty .meter__label { color: var(--danger); }
+
+.forecast { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13.5px; }
+.forecast--low, .forecast--unset { color: var(--warn); }
+.forecast--empty { color: var(--danger); }
+
+/* ---------- 发送趋势 ---------- */
+/* 两组数字既是合计也是图例：前面的色条对应图上那条线。 */
+.trend__body { transition: opacity .15s; }
+.trend.is-refreshing .trend__body { opacity: .55; }
+.trend__figures { display: flex; flex-wrap: wrap; gap: 12px 56px; margin: 0 0 18px; }
+.trend__figure { --tone: var(--bar); }
+.trend__figure--failed { --tone: var(--danger-fill); }
+.trend__figure dt { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; line-height: 20px; }
+.trend__figure dt i { width: 12px; height: 3px; border-radius: 2px; background: var(--tone); }
+.trend__figure dd { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 20px; }
+.trend__figure dd:first-of-type { margin-top: 2px; font-size: 13.5px; line-height: 36px; }
+.trend__figure dd b {
+  margin-right: 5px;
+  color: var(--ink);
+  font-size: 30px;
+  font-weight: 700;
+  font-stretch: 110%;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart { position: relative; }
+.chart svg { display: block; overflow: visible; }
+.chart__grid line { stroke: var(--line); stroke-width: 1; shape-rendering: crispEdges; }
+.chart__grid .chart__base { stroke: var(--line-strong); }
+.chart__grid text { fill: var(--faint); font: 500 11px var(--font-mono); }
+
+.chart__data, .chart__hover { position: absolute; inset: 0; }
+/* 曲线从左到右画出来。 */
+.chart__data { pointer-events: none; animation: wipe .95s var(--ease); }
+@keyframes wipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+.chart__fade-from { stop-color: var(--bar); stop-opacity: .24; }
+.chart__fade-to { stop-color: var(--bar); stop-opacity: 0; }
+.chart__line { fill: none; stroke: var(--bar); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.chart__line--failed { stroke: var(--danger-fill); stroke-width: 1.5; }
+/* 今天还没过完，最后一段用虚线，免得被读成「今天掉下来了」。 */
+.chart__line--today { stroke-dasharray: 2 5; }
+.chart__dot { fill: var(--bar); stroke: var(--surface); stroke-width: 2.5; }
+.chart__dot--failed { fill: var(--danger-fill); }
+.chart__empty { position: absolute; inset: 0 0 28px; display: grid; place-items: center; color: var(--muted); font-size: 13.5px; pointer-events: none; }
+
+.chart__hover { border-radius: 8px; outline-offset: 4px; cursor: crosshair; touch-action: pan-y; }
+.chart__guide { stroke: var(--line-strong); stroke-width: 1; shape-rendering: crispEdges; }
+/* 明细浮窗贴着被选中的那一天，默认在右侧，靠近右边缘时翻到左侧。 */
+.chart__tip {
+  position: absolute;
+  z-index: 2;
+  min-width: 150px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-pop);
+  font-size: 13px;
+  line-height: 22px;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(14px, -50%);
+  transition: left .08s ease-out, top .08s ease-out;
+}
+.chart__tip.is-flipped { transform: translate(calc(-100% - 14px), -50%); }
+.chart__tip strong { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 4px; font-weight: 600; }
+.chart__tip em { color: var(--faint); font-size: 12px; font-style: normal; font-weight: 400; }
+.chart__tip dl { margin: 0; }
+.chart__row { --tone: var(--bar); display: flex; align-items: center; justify-content: space-between; gap: 20px; color: var(--muted); }
+.chart__row--failed { --tone: var(--danger-fill); }
+.chart__row--pending { --tone: var(--info); }
+.chart__row--unknown { --tone: var(--warn-fill); }
+.chart__row dt { display: flex; align-items: center; gap: 8px; }
+.chart__row dt i { width: 8px; height: 8px; border-radius: 2px; background: var(--tone); }
+.chart__row dd { margin: 0; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }

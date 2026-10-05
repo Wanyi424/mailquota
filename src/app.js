@@ -4,13 +4,16 @@ import helmet from 'helmet';
 import bcrypt from 'bcryptjs';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { z } from 'zod';
 import { AppError, fail, parse } from './errors.js';
-import { fields, version, sendSchema, verifySchema, requestId, email, htmlSchema, render } from './validation.js';
+import { version, sendSchema, verifySchema, requestId, updateSchema } from './validation.js';
 import { requestData, sendResponse } from './service.js';
 
-export function createApp({ service, config, admin, secure = new URL(admin.origin).protocol === 'https:', trustProxy = 'loopback', logger = () => {} }) {
+// 管理端统计按北京时间分日。
+const DAY = 86400000, UTC8 = 8 * 3600000;
+
+export function createApp({ service, config, admin, sender = '', secure = new URL(admin.origin).protocol === 'https:', trustProxy = 'loopback', logger = () => {} }) {
   const app = express();
   app.disable('x-powered-by'); app.set('trust proxy', trustProxy);
   app.use(helmet({ strictTransportSecurity: secure ? undefined : false, contentSecurityPolicy: { directives: { imgSrc: ["'self'", 'https:', 'data:'], frameSrc: ["'self'"], objectSrc: ["'none'"], upgradeInsecureRequests: secure ? [] : null } } })); app.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
@@ -32,6 +35,7 @@ export function createApp({ service, config, admin, secure = new URL(admin.origi
   app.use('/admin', session({ name: 'mailquota.sid', secret: admin.sessionSecret, store: sessions, resave: false, saveUninitialized: false, cookie: { httpOnly: true, secure, sameSite: 'strict', maxAge: 8 * 3600000 } }));
   const loginFailures = new Map();
   const sameOrigin = (req) => req.get('Origin') === admin.origin;
+  const identity = req => ({ username: req.session.admin, csrf_token: req.session.csrf, sender });
   app.post('/admin/api/login', async (req, res) => {
     if (!sameOrigin(req)) fail(403, 'CSRF_INVALID', '请求来源无效');
     const body = parse(z.object({ username: z.string().max(200), password: z.string().max(200) }).strict(), req.body);
@@ -47,7 +51,7 @@ export function createApp({ service, config, admin, secure = new URL(admin.origi
     await new Promise((resolve, reject) => req.session.regenerate(e => e ? reject(e) : resolve()));
     req.session.admin = admin.username; req.session.csrf = randomBytes(32).toString('base64url');
     req.session.expiresAt = t + 8 * 3600000;
-    ok(res, 'LOGGED_IN', { username: admin.username, csrf_token: req.session.csrf });
+    ok(res, 'LOGGED_IN', identity(req));
   });
   app.use('/admin/api', (req, res, next) => {
     if (!req.session.admin || req.session.expiresAt <= service.now()) return next(new AppError(401, 'ADMIN_AUTH_REQUIRED', '请先登录管理员账号'));
@@ -57,48 +61,38 @@ export function createApp({ service, config, admin, secure = new URL(admin.origi
     }
     next();
   });
-  app.get('/admin/api/session', (req, res) => ok(res, 'SESSION_FOUND', { username: req.session.admin, csrf_token: req.session.csrf }));
+  app.get('/admin/api/session', (req, res) => ok(res, 'SESSION_FOUND', identity(req)));
   app.post('/admin/api/logout', (req, res, next) => req.session.destroy(e => { if (e) return next(e); res.clearCookie('mailquota.sid', { httpOnly: true, secure, sameSite: 'strict' }); ok(res, 'LOGGED_OUT'); }));
-  app.get('/admin/api/customers', (req, res) => {
-    const q = parse(z.object({ page: positive.default(1), page_size: positive.max(100).default(20) }).strict(), req.query);
-    const all = [...config.customers.values()]; ok(res, 'CUSTOMERS_FOUND', { total: all.length, ...q, items: all.slice((q.page - 1) * q.page_size, q.page * q.page_size).map(c => config.public(c)) });
-  });
+  // 客户只有寥寥数个且全在内存配置里，一次返回全部；历史记录仍然分页。
+  app.get('/admin/api/customers', (req, res) => { parse(z.object({}).strict(), req.query); ok(res, 'CUSTOMERS_FOUND', { items: [...config.customers.values()].map(c => config.public(c)) }); });
   app.post('/admin/api/customers', (req, res) => { const c = config.create(req.body); audit('customer_created', c.customer_id); ok(res.status(201), 'CUSTOMER_CREATED', { ...config.public(c), api_key: c.api_key }); });
-  app.get('/admin/api/customers/:id', (req, res) => ok(res, 'CUSTOMER_FOUND', config.public(config.require(req.params.id))));
+  const detail = c => ({ ...config.public(c), html: c.html });
+  app.get('/admin/api/customers/:id', (req, res) => ok(res, 'CUSTOMER_FOUND', detail(config.require(req.params.id))));
+  // 名称、启停、额度、邮件信息和 HTML 在同一次原子发布中生效，版本只推进一次。
   app.patch('/admin/api/customers/:id', (req, res) => {
-    const { version: v, ...changes } = parse(z.object({ version, name: fields.name }).strict(), req.body);
-    const c = config.update(req.params.id, v, changes); audit('customer_updated', c.customer_id); ok(res, 'CUSTOMER_UPDATED', config.public(c));
+    const { version: v, html, ...changes } = parse(updateSchema, req.body);
+    const c = config.update(req.params.id, v, changes, html); audit('customer_updated', c.customer_id, Object.keys(req.body).filter(key => key !== 'version')); ok(res, 'CUSTOMER_UPDATED', detail(c));
   });
-  app.put('/admin/api/customers/:id/enabled', (req, res) => {
-    const b = parse(z.object({ version, enabled: z.boolean(), confirmed: z.literal(true) }).strict(), req.body);
-    const c = config.update(req.params.id, b.version, { enabled: b.enabled }); audit('customer_enabled_changed', c.customer_id); ok(res, 'CUSTOMER_UPDATED', config.public(c));
-  });
-  app.post('/admin/api/customers/:id/key/reset', (req, res) => {
-    const b = parse(z.object({ version, confirmed: z.literal(true) }).strict(), req.body);
+  app.post('/admin/api/customers/:id/key', (req, res) => {
+    const b = parse(z.object({ version }).strict(), req.body);
     const c = config.update(req.params.id, b.version, { api_key: randomBytes(32).toString('base64url') }); audit('customer_key_reset', c.customer_id); ok(res, 'KEY_RESET', { ...config.public(c), api_key: c.api_key });
   });
-  app.put('/admin/api/customers/:id/quota', (req, res) => {
-    const b = parse(z.object({ version, quota_total: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER) }).strict(), req.body);
-    const c = config.update(req.params.id, b.version, { quota_total: b.quota_total }); audit('quota_updated', c.customer_id); ok(res, 'QUOTA_UPDATED', config.public(c));
-  });
-  app.put('/admin/api/customers/:id/mail', (req, res) => {
-    const { version: v, ...b } = parse(z.object({ version, from_name: fields.from_name, subject: fields.subject, reply_to: fields.reply_to, text_template: fields.text_template }).strict(), req.body);
-    const c = config.update(req.params.id, v, b); audit('mail_updated', c.customer_id); ok(res, 'MAIL_UPDATED', config.public(c));
-  });
-  app.get('/admin/api/customers/:id/template', (req, res) => { const c = config.require(req.params.id); ok(res, 'TEMPLATE_FOUND', { html: c.html, version: c.version }); });
-  app.put('/admin/api/customers/:id/template', (req, res) => {
-    const b = parse(z.object({ version, html: htmlSchema }).strict(), req.body);
-    const c = config.update(req.params.id, b.version, {}, b.html); audit('template_updated', c.customer_id); ok(res, 'TEMPLATE_UPDATED', { version: c.version });
-  });
-  app.post('/admin/api/template/preview', (req, res) => {
-    const b = parse(z.object({ html: htmlSchema }).strict(), req.body);
-    res.set('Content-Security-Policy', "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src https:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'");
-    res.type('html').send(render(b.html));
+  app.get('/admin/api/stats', (req, res) => {
+    const { days } = parse(z.object({ days: positive.max(90).default(14) }).strict(), req.query);
+    const first = Math.floor((service.now() + UTC8) / DAY) - days + 1, customers = {};
+    // status 条件让查询走 (status, created_at) 索引，不随永久保留的历史一起变慢。
+    for (const r of service.db.prepare(`SELECT customer_id, (created_at+${UTC8})/${DAY} AS day, status, count(*) AS n FROM send_requests WHERE status IN ('pending','accepted','failed','unknown') AND created_at>=? GROUP BY customer_id, day, status`).all(first * DAY - UTC8)) {
+      const series = customers[r.customer_id] ??= Object.fromEntries(['accepted', 'failed', 'unknown', 'pending'].map(status => [status, Array(days).fill(0)]));
+      if (r.day - first < days) series[r.status][r.day - first] = r.n;
+    }
+    ok(res, 'STATS_FOUND', { days: Array.from({ length: days }, (_, i) => new Date((first + i) * DAY).toISOString().slice(0, 10)), customers, unresolved: service.db.prepare("SELECT count(*) AS n FROM send_requests WHERE status='unknown'").get().n });
   });
   app.get('/admin/api/requests', (req, res) => {
-    const q = parse(z.object({ page: positive.default(1), page_size: positive.max(100).default(20), customer_id: z.string().max(64).optional(), status: z.enum(['pending', 'accepted', 'failed', 'unknown']).optional(), email: email.optional(), from: z.coerce.number().int().nonnegative().optional(), to: z.coerce.number().int().nonnegative().optional() }).strict().refine(v => v.from === undefined || v.to === undefined || v.from <= v.to), req.query);
+    const q = parse(z.object({ page: positive.default(1), page_size: positive.max(100).default(20), customer_id: z.string().max(64).optional(), status: z.enum(['pending', 'accepted', 'failed', 'unknown']).optional(), q: z.string().trim().toLowerCase().min(1).max(254).optional(), from: z.coerce.number().int().nonnegative().optional(), to: z.coerce.number().int().nonnegative().optional() }).strict().refine(v => v.from === undefined || v.to === undefined || v.from <= v.to), req.query);
     const clauses = [], args = [];
-    for (const key of ['customer_id', 'status', 'email']) if (q[key] !== undefined) { clauses.push(`${key}=?`); args.push(q[key]); }
+    for (const key of ['customer_id', 'status']) if (q[key] !== undefined) { clauses.push(`${key}=?`); args.push(q[key]); }
+    // 邮箱按包含匹配；整段等于请求编号时同样命中，方便直接粘贴客户侧日志里的 UUID。
+    if (q.q !== undefined) { clauses.push("(email LIKE ? ESCAPE '\\' OR request_id=?)"); args.push(`%${q.q.replace(/[\\%_]/g, '\\$&')}%`, q.q); }
     if (q.from !== undefined) { clauses.push('created_at>=?'); args.push(q.from); }
     if (q.to !== undefined) { clauses.push('created_at<=?'); args.push(q.to); }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
@@ -106,18 +100,25 @@ export function createApp({ service, config, admin, secure = new URL(admin.origi
     const items = service.db.prepare(`SELECT * FROM send_requests ${where} ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?`).all(...args, q.page_size, (q.page - 1) * q.page_size);
     ok(res, 'REQUESTS_FOUND', { total, page: q.page, page_size: q.page_size, items });
   });
+  app.get('/admin/api/requests/:id', (req, res) => {
+    const row = service.db.prepare('SELECT * FROM send_requests WHERE id=?').get(parse(positive, req.params.id));
+    if (!row) fail(404, 'REQUEST_NOT_FOUND', '发送记录不存在');
+    ok(res, 'REQUEST_FOUND', row);
+  });
   app.post('/admin/api/requests/:id/resolve', (req, res) => {
     const id = parse(positive, req.params.id);
-    const b = parse(z.object({ status: z.enum(['accepted', 'failed']), note: z.string().trim().min(1).max(2000), confirmed: z.literal(true) }).strict(), req.body);
+    const b = parse(z.object({ status: z.enum(['accepted', 'failed']), note: z.string().trim().max(2000).default('') }).strict(), req.body);
     ok(res, 'REQUEST_RESOLVED', service.settle(id, 'unknown', { status: b.status }, { name: req.session.admin, note: b.note }));
   });
-  function audit(event, customer_id) { logger({ event, customer_id }); }
+  function audit(event, customer_id, fields) { logger({ event, customer_id, ...(fields ? { fields } : {}) }); }
   // Only the packaged admin UI is public. Storage, configuration and templates are never static roots.
   const adminPublic = fileURLToPath(new URL('../public/admin/', import.meta.url));
   app.get('/', (req, res) => res.redirect('/admin/'));
   app.get('/admin', (req, res, next) => req.path.endsWith('/') ? next() : res.redirect('/admin/'));
   app.get('/admin/', (req, res) => res.sendFile(join(adminPublic, 'index.html')));
-  app.use('/admin/assets', express.static(adminPublic, { index: false, dotfiles: 'deny', redirect: false }));
+  // 构建产物 assets/ 下的文件名带内容哈希，可以长期缓存；入口页与接口仍然 no-store。
+  const hashed = join(adminPublic, 'assets') + sep;
+  app.use('/admin/assets', express.static(adminPublic, { index: false, dotfiles: 'deny', redirect: false, setHeaders: (res, path) => { if (path.startsWith(hashed)) res.set('Cache-Control', 'public, max-age=31536000, immutable'); } }));
   // BrowserRouter routes are served by the same packaged entrypoint. API and asset paths stay JSON/static boundaries.
   app.get(/^\/admin\/(?!api(?:\/|$)|assets(?:\/|$)).+$/, (req, res) => res.sendFile(join(adminPublic, 'index.html')));
   app.use((req, res) => res.status(404).json({ success: false, code: 'NOT_FOUND', message: '接口不存在' }));

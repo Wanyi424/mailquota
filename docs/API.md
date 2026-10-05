@@ -1,6 +1,6 @@
 # API 与前端接入契约
 
-管理端已在 `/admin/` 通过同一服务同源提供，页面设计与手动验收见 [FRONTEND.md](FRONTEND.md)。所有时间为 UTC Unix 毫秒；UI 按 Asia/Shanghai 显示并标注时区。所有 JSON 请求严格拒绝未知字段。
+管理端已在 `/admin/` 通过同一服务同源提供，源码在 `frontend/`。所有时间为 UTC Unix 毫秒；UI 按 Asia/Shanghai 显示并标注时区。所有 JSON 请求严格拒绝未知字段。
 
 ## 通用响应
 
@@ -66,23 +66,31 @@ Nginx按实际连接来源的保护返回429 `SOURCE_RATE_LIMIT`，不依赖客�
 
 单管理员独立认证，Cookie 会话绝对有效期 8 小时，重启需重登。Cookie 为 `mailquota.sid`，HttpOnly、SameSite=Strict；PUBLIC_ORIGIN为HTTPS时设置Secure并校验HTTPS请求，为HTTP时允许本地HTTP会话。管理接口不接受客户密钥替代登录。
 
-`POST /admin/api/login`：`{"username":"admin","password":"..."}`。需要 `Origin` 与 `PUBLIC_ORIGIN` 完全一致。成功返回 `data.username` 与 `data.csrf_token` 并设置 Cookie。同来源 15 分钟最多 10 次失败；429 `LOGIN_RATE_LIMIT`。
+`POST /admin/api/login`：`{"username":"admin","password":"..."}`。需要 `Origin` 与 `PUBLIC_ORIGIN` 完全一致。成功返回 `data.username`、`data.csrf_token` 和 `data.sender`（实际发信地址，仅用于邮件预览显示）并设置 Cookie。同来源 15 分钟最多 10 次失败；429 `LOGIN_RATE_LIMIT`。
 
-`GET /admin/api/session`：获取当前 username 和 csrf_token。
+`GET /admin/api/session`：返回与登录相同的三个字段。
 
 登录后所有管理写操作带 Cookie、正确 Origin 和 `X-CSRF-Token`。前端使用同源 fetch，默认发送 Cookie，token 保存在页面内存即可。登录不要求已有 CSRF token，但检查 Origin。无会话为 401 `ADMIN_AUTH_REQUIRED`，CSRF 失败为 403 `CSRF_INVALID`。
 
-`POST /admin/api/logout`：销毁会话。管理变更应发送 JSON；禁用按钮直至请求完成。
+`POST /admin/api/logout`：销毁会话。
 
 ## 管理操作
 
-创建/编辑完整校验后原子替换配置文件，所有编辑均提供当前 `version`。冲突返回 409 `EDIT_CONFLICT`，重新读取后人工确认修改，不能静默覆盖。JSON 配置与 HTML 分别保存；HTML 保存也推进客户版本，所以保存后需要更新页面版本。
+以下路径统一前缀 `/admin/api`。创建/编辑完整校验后原子替换配置文件，所有编辑均提供当前 `version`。冲突返回 409 `EDIT_CONFLICT`，重新读取后人工确认修改，不能静默覆盖。停用、重置密钥、人工结算前的二次确认由管理端界面负责，接口不再要求 `confirmed` 字段。
 
-### 客户列表和详情
+### 客户
 
-- `GET /admin/api/customers?page=1&page_size=20`：`data.items,total,page,page_size`，最大每页100。
-- `GET /admin/api/customers/{id}`：返回客户完整配置（不含真实密钥和 HTML）、`version`、`api_key_mask`、`quota_total,used_count,reserved_count,available_count`。
-- `POST /admin/api/customers`：创建，HTTP201。必填 `customer_id,name,from_name,subject,text_template,reply_to,html`；可选 `enabled`（默认false）、`quota_total`（默认0）。返回公共详情及仅此时可见的 `api_key`。
+| 方法与路径 | 说明 |
+| --- | --- |
+| GET /customers | 返回全部客户 `data.items`（不分页，不含真实密钥和 HTML） |
+| POST /customers | 创建，HTTP 201，返回公共详情及仅此时可见的 `api_key` |
+| GET /customers/{id} | 公共详情加 `html`（当前 HTML 模板） |
+| PATCH /customers/{id} | 一次修改任意若干项，返回公共详情加 `html` |
+| POST /customers/{id}/key | `{"version":1}`，重置密钥，返回公共详情及完整新 `api_key` |
+
+公共详情包含客户配置、`version`、`api_key_mask`、`quota_total,used_count,reserved_count,available_count`。
+
+创建必填 `customer_id,name,from_name,subject,text_template,reply_to,html`；可选 `enabled`（默认false）、`quota_total`（默认0）：
 
 ```json
 {
@@ -95,48 +103,56 @@ Nginx按实际连接来源的保护返回429 `SOURCE_RATE_LIMIT`，不依赖客�
 
 `customer_id` 不可修改、不允许删除，也不允许复用遗留用量行；重名返回409 `CUSTOMER_EXISTS`。名称必填、最多200字符。
 
-### 名称、启停、密钥与额度
-
-| 方法与路径（统一前缀 /admin/api） | JSON 请求 |
-| --- | --- |
-| PATCH /customers/{id} | `{"version":1,"name":"新名称"}` |
-| PUT /customers/{id}/enabled | `{"version":1,"enabled":false,"confirmed":true}` |
-| POST /customers/{id}/key/reset | `{"version":1,"confirmed":true}` |
-| PUT /customers/{id}/quota | `{"version":1,"quota_total":1000}` |
-
-这些接口返回保存后的公共详情，密钥重置另附完整新 `api_key`，旧密钥立即失效。版本均推进1。
-
-UI 必须在停用和重置密钥前展示影响并二次确认，再发 `confirmed:true`；该字段为交互契约，不能取代权限校验。启用接口同样要求该字段。已开始发送继续按原配置结算。
-
-额度提交目标总数，非“加 N”；同一请求重试因版本冲突不会重复增额。UI 可输入增加量再计算目标。只许非负安全整数且不能降低，不提供清零或直接修改计数。
-
-### 邮件设置与模板
-
-`PUT /admin/api/customers/{id}/mail`：`version,from_name,subject,reply_to,text_template` 全部必填；返回公共详情。
-
-- 昵称最多100字符，标题最多200字符，禁止控制字符和换行；静态标题不执行变量或表达式。
-- reply_to 可为空，非空时为单个邮箱。
-- 纯文本最多16KiB，HTML最多256KiB；两者必须有 `{{code}}`，仅另支持 `{{expires_minutes}}`。
-- `GET /admin/api/customers/{id}/template`：返回 `data.html,version`。
-- `PUT /admin/api/customers/{id}/template`：`{"version":1,"html":"<p>{{code}}</p>"}`，返回新version。
-- `POST /admin/api/template/preview`：`{"html":"<p>{{code}}</p>"}`，返回 `text/html`，示例验证码固定083721，带 CSP sandbox（不允许脚本、同源能力、表单、任意资源，仅允许HTTPS图片及内联样式）。不发送真实邮件、不消耗额度、不抓取素材。
-
-前端以 `<iframe sandbox="" referrerpolicy="no-referrer">` 展示预览。通过 fetch 获取 HTML 再写入 iframe.srcdoc 时，HTTP CSP 不随文本转移，必须保留空 sandbox 且在 srcdoc 中使用等效 CSP。当前管理端会在模板内容之前加入该限制。绝不能插入管理页面 DOM，不能加 allow-scripts/allow-same-origin。编辑源代码可以作为 textarea 的文本值显示。
-
-### 发送记录与待确认处理
-
-`GET /admin/api/requests` 支持 `customer_id,status,email,from,to,page,page_size`；from/to 是毫秒整数（含边界）。email 精确匹配规范化邮箱；默认20，最多100。返回 `data.items,total,page,page_size`。
-
-记录包含规范定义的发送记录字段：id、客户ID、请求UUID、邮箱、IP、状态、SMTP消息ID、脱敏错误代码/说明、创建/更新时间、人工处理时间/管理员/依据。不含验证码或邮件正文。`status=unknown` 即待确认列表。
-
-`POST /admin/api/requests/{内部id}/resolve`：
+`PATCH /customers/{id}` 接受 `version` 加上 `name,enabled,quota_total,from_name,subject,reply_to,text_template,html` 中的至少一项，未出现的保持不变：
 
 ```json
-{"status":"accepted","note":"已根据服务商记录确认受理","confirmed":true}
+{"version":3,"from_name":"示例网站","subject":"邮箱验证码","html":"<p>{{code}}</p>"}
 ```
 
-status 仅 accepted/failed；note 去空白后必填、最多2000字符；UI 必须二次确认并说明扣量或释放的影响。只允许 unknown，原发送结果已隔离；重复处理409 `STATE_CONFLICT`，刷新当前结果。返回完整处理后记录。不会重发邮件、恢复过期或已被替换验证码。
+- 提交的各项在同一次原子发布中生效，版本只推进 1；任一项非法则整次不生效。
+- `quota_total` 提交目标总数，非“加 N”；同一请求重试因版本冲突不会重复增额。只许非负安全整数且不能降低，不提供清零或直接修改计数。
+- 停用后该客户的发送、查询、核验全部拒绝；已开始的发送继续按原配置结算。
+- 昵称最多100字符，标题最多200字符，禁止控制字符和换行；静态标题不执行变量或表达式。reply_to 可为空，非空时为单个邮箱。
+- 纯文本最多16KiB，HTML最多256KiB；两者必须有 `{{code}}`，仅另支持 `{{expires_minutes}}`。提交 `html` 时模板另存为新的版本化文件。
+
+重置密钥后旧密钥立即失效，额度和历史不变。
+
+### 模板预览
+
+服务端不提供预览接口。管理端在浏览器本地把 `{{code}}` 替换为固定示例 083721、`{{expires_minutes}}` 替换为 5，与真实发信使用同一套替换规则；不发送邮件、不消耗额度、不抓取素材。
+
+预览只能放进 `<iframe sandbox="" referrerpolicy="no-referrer">` 的 srcdoc，并在模板内容之前写入等效的 CSP（不允许脚本、同源能力、表单、任意资源，仅允许HTTPS图片及内联样式）。绝不能插入管理页面 DOM，不能加 allow-scripts/allow-same-origin。编辑源代码可以作为 textarea 的文本值显示。
+
+### 统计
+
+`GET /stats?days=14`（1–90，默认14）：按北京时间分日的发送统计。
+
+```json
+{
+  "days":["2026-09-21","…","2026-10-04"],
+  "customers":{"customer_a":{"accepted":[120,131],"failed":[0,1],"unknown":[0,0],"pending":[0,0]}},
+  "unresolved":1
+}
+```
+
+`days` 从早到晚，最后一项是今天；每个状态的数组与 `days` 一一对应。时间窗内没有发送的客户不出现在 `customers` 中。`unresolved` 是全部 `unknown` 记录数，不受时间窗限制。
+
+### 发送记录与结果不明的处理
+
+`GET /requests` 支持 `customer_id,status,q,from,to,page,page_size`；from/to 是毫秒整数（含边界）；默认20，最多100，不一次返回全部历史。`q` 按邮箱包含匹配（不区分大小写，`%` 和 `_` 按字面处理），整段等于请求 UUID 时同样命中。返回 `data.items,total,page,page_size`。
+
+`GET /requests/{内部id}`：返回单条记录，不存在为 404 `REQUEST_NOT_FOUND`。
+
+记录包含规范定义的发送记录字段：id、客户ID、请求UUID、邮箱、IP、状态、SMTP消息ID、脱敏错误代码/说明、创建/更新时间、人工处理时间/管理员/备注。不含验证码或邮件正文。`status=unknown` 即结果不明、等待人工核查的记录。
+
+`POST /requests/{内部id}/resolve`：
+
+```json
+{"status":"accepted","note":"已根据服务商记录确认受理"}
+```
+
+status 仅 accepted/failed；note 选填，最多2000字符。只允许处理 unknown，原发送结果已隔离；重复处理409 `STATE_CONFLICT`，刷新当前结果。返回完整处理后记录。不会重发邮件、恢复过期或已被替换验证码。
 
 ## 健康与静态文件
 
-`GET /health/live` 进程存活；`GET /health/ready` 检查数据库和必要配置。无需登录且不发真实邮件；Nginx 示例禁止外网访问健康路径。配置、数据库、实际邮件模板源文件不进行静态托管。`GET /` 与 `GET /admin` 跳转 `/admin/`；`GET /admin/` 提供不含客户数据的管理页面壳，`/admin/assets/` 只提供 `public/admin` 下的静态资源，所有真实管理数据仍需要认证。
+`GET /health/live` 进程存活；`GET /health/ready` 检查数据库和必要配置。无需登录且不发真实邮件；Nginx 示例禁止外网访问健康路径。配置、数据库、实际邮件模板源文件不进行静态托管。`GET /` 与 `GET /admin` 跳转 `/admin/`；`GET /admin/` 及其下的页面地址提供不含客户数据的管理页面壳，`/admin/assets/` 只提供 `public/admin` 下的静态资源，所有真实管理数据仍需要认证。页面壳与接口响应为 `no-store`；`/admin/assets/assets/` 下文件名带内容哈希的脚本、样式和字体长期缓存。
