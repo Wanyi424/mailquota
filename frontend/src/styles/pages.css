@@ -41,11 +41,14 @@
 }
 .attention__text { font-size: 14.5px; }
 .attention__text b { font-weight: 600; }
+/* 待办太多时只先摆最要紧的几件，这一行用来展开其余的。 */
+.attention__more { display: flex; justify-content: center; }
+.attention__more .link { padding: 4px 8px; border: 0; background: none; cursor: pointer; }
 
-/* 客户列表：谁、还剩多少、还能用多久，三列各管一件事。 */
-.customer-row { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.45fr) minmax(0, .85fr) 16px; }
-a.customer-row { min-height: 76px; }
-.customer-row.is-off .quota-cell__line b, .customer-row.is-off .runway b { color: var(--muted); }
+/* 租户列表：谁、还剩多少、还能用多久，三列各管一件事。 */
+.tenant-row { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.45fr) minmax(0, .85fr) 16px; }
+a.tenant-row { min-height: 76px; }
+.tenant-row.is-off .quota-cell__line b, .tenant-row.is-off .runway b { color: var(--muted); }
 
 .who { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .who__avatar { position: relative; flex: none; }
@@ -69,7 +72,7 @@ a.customer-row { min-height: 76px; }
 .runway--low b { color: var(--warn); }
 .runway--empty b { color: var(--danger); }
 
-/* ---------- 客户页 ---------- */
+/* ---------- 租户页 ---------- */
 .workspace-head { display: flex; align-items: center; flex-wrap: wrap; gap: 16px 18px; margin-bottom: 22px; }
 .workspace-head__main { flex: 1 1 260px; min-width: 0; }
 .workspace-head__meta { display: flex; align-items: center; gap: 4px; height: 30px; color: var(--muted); font-size: 13.5px; }
@@ -77,7 +80,7 @@ a.customer-row { min-height: 76px; }
 .workspace-head .switch input:not(:checked) ~ .switch__label { color: var(--muted); }
 
 /*
- * 客户名称。显示和编辑两种状态共用这一行：行高固定，标题和输入框字号相同，
+ * 租户名称。显示和编辑两种状态共用这一行：行高固定，标题和输入框字号相同，
  * 所以点铅笔进入编辑、保存或取消，这一行和它下面的内容都不会移动。
  */
 .title { display: flex; align-items: center; gap: 4px; height: 40px; min-width: 0; font-size: 28px; font-weight: 700; line-height: 40px; }
@@ -118,9 +121,10 @@ a.customer-row { min-height: 76px; }
 .tabs + .notice { margin-bottom: 16px; }
 
 .overview { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; }
-.overview > .notice, .overview > .trend { grid-column: 1 / -1; }
+.overview > .notice, .overview > .trend, .overview > .ledger { grid-column: 1 / -1; }
 .overview > :nth-child(2) { --order: 1; }
 .overview > .trend { --order: 2; }
+.overview > .ledger { --order: 3; }
 .quota-panel { display: flex; flex-direction: column; gap: 18px; padding: 22px 26px 24px; }
 .quota-panel .panel__head { margin-bottom: 0; }
 /* 面板被同一行的另一块拉高时，预估这句话留在底部。 */
@@ -146,6 +150,15 @@ a.customer-row { min-height: 76px; }
 .mini-records .status { justify-self: start; }
 .mini-records .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mini-records time { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+
+/* 调额记录：变化了多少、调整前后的总额度、原因、时间。 */
+.ledger-row { grid-template-columns: 120px minmax(0, 1fr) minmax(0, 1.3fr) 128px; padding-block: 12px; font-size: 14px; }
+.ledger-row.trow--head { padding-block: 7px; font-size: 12.5px; }
+.ledger__delta { color: var(--ok); font-weight: 700; font-stretch: 108%; font-variant-numeric: tabular-nums; }
+.ledger__delta.is-minus { color: var(--danger); }
+.ledger__totals { color: var(--ink-soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ledger__reason { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ledger__empty { padding: 18px 20px; }
 
 /* ---------- 邮件 ---------- */
 .email { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 16px; padding-bottom: 72px; }
@@ -223,10 +236,7 @@ a.customer-row { min-height: 76px; }
 .access .kv + .code { margin-top: 12px; }
 /* 刚生成的完整密钥像被荧光笔划过，和平时的掩码一眼分得开。 */
 .kv .is-fresh .mono { background: linear-gradient(transparent 55%, var(--marker) 55%); font-weight: 600; }
-.access__reset { --order: 2; grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 14px 24px; }
-.access__reset > div { flex: 1 1 320px; }
-.access__reset h2 { font-size: 16px; }
-.access__reset p { margin-top: 4px; color: var(--muted); font-size: 13.5px; }
+.access__wide { --order: 2; grid-column: 1 / -1; }
 
 /* ---------- 发送记录 ---------- */
 /* 工具栏：搜索框吃掉剩余宽度，其余控件宽度固定；筛选怎么变，这一行都不动。 */
@@ -249,8 +259,8 @@ a.customer-row { min-height: 76px; }
 .record-row--scoped { grid-template-columns: 96px minmax(0, 1.9fr) minmax(0, 1fr) 128px 16px; }
 .record-row.trow--head { padding-block: 7px; font-size: 12.5px; }
 .record-row .status { justify-self: start; }
-.record__email, .record__customer, .record__note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.record__customer { color: var(--ink-soft); font-size: 13.5px; }
+.record__email, .record__tenant, .record__note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.record__tenant { color: var(--ink-soft); font-size: 13.5px; }
 .record__note { color: var(--muted); font-size: 13px; }
 .record__time { justify-content: flex-end; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .records__skeleton { display: grid; gap: 16px; padding: 18px 20px; }
@@ -264,6 +274,13 @@ a.customer-row { min-height: 76px; }
 .record-hero__story { color: var(--ink-soft); font-size: 14.5px; line-height: 1.7; }
 .record-hero__caveat { margin-top: -6px; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .kv--detail { border-top: 1px solid var(--line); }
+
+/* 抽屉里那封当时实际发出的邮件。 */
+.sent-mail { margin-top: 22px; }
+.sent-mail__head { display: flex; align-items: center; gap: 2px; min-height: 34px; margin-bottom: 12px; }
+.sent-mail__head .segmented { margin-left: auto; }
+.sent-mail .mail__body { height: 420px; }
+.sent-mail__note { margin-top: 10px; color: var(--muted); font-size: 13px; }
 
 .resolve {
   display: grid;
@@ -303,15 +320,18 @@ a.customer-row { min-height: 76px; }
 @media (max-width: 760px) {
   /* 窄屏下表头收起，一行拆成上下几段。 */
   .trow--head { display: none; }
-  .customer-row { grid-template-columns: minmax(0, 1fr) 16px; gap: 12px; padding-block: 16px; }
-  .customer-row .quota-cell, .customer-row .runway { grid-column: 1 / -1; }
-  .customer-row > .icon { grid-area: 1 / 2; }
+  .tenant-row { grid-template-columns: minmax(0, 1fr) 16px; gap: 12px; padding-block: 16px; }
+  .tenant-row .quota-cell, .tenant-row .runway { grid-column: 1 / -1; }
+  .tenant-row > .icon { grid-area: 1 / 2; }
+  .ledger-row { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; }
+  .ledger-row .record__time { grid-area: 1 / 2; }
+  .ledger__totals, .ledger__reason { grid-column: 1 / -1; }
   .runway { display: flex; align-items: baseline; gap: 8px; }
   .record-row, .record-row--scoped { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; }
   .record-row .status { grid-area: 1 / 1; }
   .record__time { grid-area: 1 / 2; }
   .record__email { grid-area: 2 / 1 / 3 / 3; }
-  .record__customer, .record__note, .record-row > .icon { display: none; }
+  .record__tenant, .record__note, .record-row > .icon { display: none; }
   .workspace-head__actions { justify-content: space-between; width: 100%; }
   .title { font-size: 24px; }
 }

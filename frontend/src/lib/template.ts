@@ -40,7 +40,7 @@ export const renderTemplate = (value: string) => value.replace(/{{code}}/g, SAMP
 export const PREVIEW_CSP = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src https:; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'; connect-src 'none'";
 
 /**
- * 预览文档只能放进 sandbox="" 的 iframe。限制策略写在模板内容之前，
- * 模板里的任何标签都来不及在它生效前执行或加载资源。
+ * 邮件正文只能放进 sandbox="" 的 iframe，并且外面套上这层文档：限制策略写在正文之前，
+ * 正文里的任何标签都来不及在它生效前执行或加载资源。
  */
-export const previewDocument = (html: string) => `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}"><meta name="referrer" content="no-referrer">${renderTemplate(html)}`;
+export const frameDocument = (html: string) => `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}"><meta name="referrer" content="no-referrer">${html}`;

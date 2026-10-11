@@ -513,6 +513,7 @@ POST  /tenant/api/logout
 GET   /tenant/api/me
 GET   /tenant/api/quota
 GET   /tenant/api/requests
+GET   /tenant/api/stats
 GET   /tenant/api/config
 PATCH /tenant/api/config
 ~~~
@@ -531,6 +532,7 @@ PATCH /admin/api/tenants/:customer_id
 POST  /admin/api/tenants/:customer_id/api-key
 POST  /admin/api/tenants/:customer_id/password
 POST  /admin/api/tenants/:customer_id/quota
+GET   /admin/api/tenants/:customer_id/quota-adjustments
 GET   /admin/api/requests
 GET   /admin/api/requests/:id
 POST  /admin/api/requests/:id/resolve
@@ -738,11 +740,3 @@ send_request_contents 与 send_requests 分表，正文当前长期保留，未�
 9. 删除旧的 SQLite、JSON 配置和文件模板依赖；
 10. 更新 Docker Compose、README、API 文档和测试；
 11. 完成跨租户隔离和并发验证。
-
-
-
-
-
-
-
-

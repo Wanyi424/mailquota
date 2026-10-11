@@ -82,6 +82,11 @@ export function setQueryData<T>(key: string, data: T) {
   publish(entry, { data, error: undefined, fetching: false, at: Date.now() });
 }
 
+/** 手头已有一部分数据（比如列表里的一行）时先垫进去，完整数据读回来之前就有东西可看；已有数据时不动。 */
+export function seedQueryData<T>(key: string, data: T) {
+  if (entryFor(key).state.data === undefined) setQueryData(key, data);
+}
+
 export function clearQueries() {
   entries.clear();
 }

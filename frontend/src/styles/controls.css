@@ -79,6 +79,8 @@
   white-space: nowrap;
 }
 .field--row { grid-template-columns: 92px minmax(0, 1fr); align-items: center; gap: 12px; }
+/* 两个短字段并排，窄屏时上下排。 */
+.form__pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px 14px; }
 
 .input, .select, .editor {
   display: block;
@@ -545,6 +547,7 @@ a.trow:hover > .icon:last-child { color: var(--ink); translate: 3px 0; }
   .panel { padding: 18px 16px; }
   .table { padding: 0; }
   .table > .panel__head, .trow { padding-inline: 16px; }
-  .field--row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .field--row, .form__pair { grid-template-columns: minmax(0, 1fr); }
+  .field--row { gap: 6px; }
   .kv > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }

@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { formatNumber, type QuotaHealth } from '../lib/format';
-import type { Customer } from '../types';
+import type { Quota } from '../types';
 import { cx } from './controls';
 
 const DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
@@ -33,16 +33,16 @@ export function Odometer({ value }: { value: number }) {
   );
 }
 
-type Quota = Pick<Customer, 'quota_total' | 'available_count'>;
+type Level = Pick<Quota, 'quota_total' | 'available_count'>;
 
 // 亮起的部分不到整条的这个比例时，条里放不下字，改写在它右边。
 const LABEL_FITS_FROM = 0.25;
 
 /**
  * 额度条只有两部分：亮起的一段是还能用的，其余是已经用掉的。
- * large 用在客户概览，条更高，并把剩余比例直接写在条里；列表里的细条不写字，数字就在它上方。
+ * large 用在额度面板，条更高，并把剩余比例直接写在条里；列表里的细条不写字，数字就在它上方。
  */
-export function QuotaMeter({ quota, health, large = false }: { quota: Quota; health: QuotaHealth; large?: boolean }) {
+export function QuotaMeter({ quota, health, large = false }: { quota: Level; health: QuotaHealth; large?: boolean }) {
   const total = quota.quota_total;
   const ratio = total > 0 ? Math.max(0, Math.min(1, quota.available_count / total)) : 0;
   // 向下取整：还差一点才满时不写成 100%，快用完时也不会提前写成 0%。

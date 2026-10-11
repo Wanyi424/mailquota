@@ -15,7 +15,7 @@
 
 ## 针对性集成测试
 
-执行 `npm test`：**38项通过，0失败**；包含 TypeScript 检查、Vite 生产构建、Express 静态入口、BrowserRouter 路由和管理 API 工作流。
+执行 `pnpm test`：**38项通过，0失败**；包含 TypeScript 检查、Vite 生产构建、Express 静态入口、BrowserRouter 路由和管理 API 工作流。
 
 | 场景 | 验证结果 |
 | --- | --- |
@@ -41,10 +41,10 @@
 
 范围：管理端前端整体重写，管理接口调整（客户合并更新、统计、单条记录、记录模糊搜索、静态资源缓存），见 [API.md](API.md)。客户接口 `/api/v1`、数据库结构、认证与会话未改动。
 
-- 39 项集成测试通过、0 失败。在 WSL（Node 22）中直接以 `node --test --test-concurrency=1 test/*.test.js` 运行，未经过 `npm test` 里的 tsx 加载器。
-- TypeScript 检查与 Vite 生产构建通过。在依赖版本与 `package-lock.json` 一致的 Linux 环境中执行，构建产物已写入 `public/admin/`。
+- 39 项集成测试通过、0 失败。在 WSL（Node 22）中直接以 `node --test --test-concurrency=1 test/*.test.js` 运行，未经过 `pnpm test` 里的 tsx 加载器。
+- TypeScript 检查与 Vite 生产构建通过。在依赖版本与 `pnpm-lock.yaml` 一致的 Linux 环境中执行，构建产物已写入 `public/admin/`。
 - 每个页面用真实组件加模拟数据渲染为 HTML，共 23 个场景，无运行时报错；两套主题的文字与底色对比度按 WCAG 计算全部达标。
-- 未执行：Windows 上的 `npm test` 原命令；任何浏览器中的界面与交互验收；Docker 镜像构建、`container-check.js`、`deployment-check.js`。下文的容器与部署结果仍是 2026-10-03 的记录。
+- 未执行：Windows 上的 `pnpm test` 原命令；任何浏览器中的界面与交互验收；Docker 镜像构建、`container-check.js`、`deployment-check.js`。下文的容器与部署结果仍是 2026-10-03 的记录。
 
 ## 容器实测与恢复演练
 
@@ -76,7 +76,7 @@
 ## 部署配置与依赖
 
 - `node test/deployment-check.js`通过：真实Nginx容器`nginx -t`、Compose配置校验、备份脚本POSIX shell语法检查。使用临时证书替代真实域名证书。
-- `npm audit --registry=https://registry.npmjs.org`通过：生产和开发依赖合计0已知漏洞。环境默认镜像站不支持audit，故改用官方npm注册表查询。
+- `pnpm audit --registry=https://registry.npmjs.org`通过：生产和开发依赖合计0已知漏洞。环境默认镜像站不支持audit，故改用官方注册表查询。
 - 初次SMTP连接池关闭不能立即终止活跃发送的问题已修正：采用Nodemailer SMTPConnection显式关闭，截止和AbortSignal共同终止网络连接，状态回写只有单一结算路径。协议超时测试从约15秒连接残留降为约0.3秒（测试截止设置300毫秒）。
 - 容器临时证书曾因宿主与Docker时钟差异被拒绝，已将测试证书有效期覆盖前后一天，保持TLS证书验证开启。
 - 实现参考：[Node.js版本维护](https://github.com/nodejs/Release)、[Express 5](https://expressjs.com/en/guide/migrating-5/)、[Nodemailer SMTP连接API](https://nodemailer.com/extras/smtp-connection)。

@@ -1,96 +1,76 @@
-export type Session = {
-  username: string;
-  csrf_token: string;
-  /** 实际发信地址，仅用于让邮件预览更接近真实收件效果。 */
-  sender: string;
-};
-
-export type Customer = {
-  customer_id: string;
-  name: string;
-  from_name: string;
-  subject: string;
-  reply_to: string;
-  text_template: string;
-  html_template: string;
-  enabled: boolean;
-  quota_total: number;
-  used_count: number;
-  reserved_count: number;
-  available_count: number;
-  version: number;
-  api_key_mask: string;
-};
-
-export type CustomerDetail = Customer & { html: string };
-
-/** 完整密钥只在创建和重置的响应里出现一次。 */
-export type CustomerSecret = Customer & { api_key: string };
-
-export type NewCustomer = Pick<CustomerDetail, 'customer_id' | 'name' | 'from_name' | 'subject' | 'reply_to' | 'text_template' | 'html' | 'quota_total' | 'enabled'>;
-
-export type CustomerChanges = Partial<Pick<CustomerDetail, 'name' | 'enabled' | 'quota_total' | 'from_name' | 'subject' | 'reply_to' | 'text_template' | 'html'>>;
+// 管理端和租户门户都会用到的数据形态。各自独有的类型放在 admin/types.ts 和 tenant/types.ts。
 
 export type SendStatus = 'accepted' | 'failed' | 'pending' | 'unknown';
 
-export type RequestRow = {
-  id: number;
-  customer_id: string;
-  request_id: string;
-  email: string;
-  client_ip: string;
-  status: SendStatus;
-  created_at: number;
-  updated_at: number;
-  provider_message_id: string | null;
-  error_code: string | null;
-  error_detail: string | null;
-  resolved_at: number | null;
-  resolved_by: string | null;
-  resolution_note: string | null;
+/** 每个状态一个数组，下标与 DailyStats.days 对齐。 */
+export type Series = Record<SendStatus, number[]>;
+
+/** 两个门户的统计接口共有的部分。 */
+export type DailyStats = {
+  /** 北京时间的日期，从早到晚，最后一项是今天。 */
+  days: string[];
+  series: Series;
 };
 
-export type RequestPage = {
+export type Quota = {
+  quota_total: number;
+  used_count: number;
+  /** 发送中或结果不明的邮件暂时占着的额度。 */
+  reserved_count: number;
+  available_count: number;
+};
+
+export type MailConfig = {
+  from_name: string;
+  subject: string;
+  /** 没有设置时是 null 或空字符串。 */
+  reply_to: string | null;
+  html_template: string;
+  text_template: string;
+  /** 邮件配置的版本号，保存时带回去用于发现并发修改。 */
+  version: number;
+};
+
+export type MailChanges = Partial<{ from_name: string; subject: string; reply_to: string; html_template: string; text_template: string }>;
+
+export type TenantSummary = Quota & {
+  tenant_id: string;
+  /** 业务后端调用接口时使用的标识，创建后不可修改。 */
+  customer_id: string;
+  name: string;
+  enabled: boolean;
+  /** 租户门户的登录账号。 */
+  login_name: string;
+  created_at: string;
+};
+
+export type Tenant = TenantSummary & MailConfig & {
+  last_login_at: string | null;
+  /** 当前这把调用密钥的生成时间。完整密钥只在创建和重置时出现一次。 */
+  api_key_created_at: string | null;
+};
+
+export type Page<T> = {
   total: number;
   page: number;
   page_size: number;
-  items: RequestRow[];
+  items: T[];
 };
 
-export type RequestFilters = {
+export type RecordFilters = {
   page?: number;
   page_size?: number;
-  customer_id?: string;
   status?: SendStatus | '';
   /** 邮箱的一部分，或完整的请求编号。 */
   q?: string;
-  from?: number;
-  to?: number;
+  /** ISO 时间。 */
+  from?: string;
+  to?: string;
 };
 
-/** 每个状态一个数组，下标与 Stats.days 对齐。 */
-export type Series = Record<SendStatus, number[]>;
-
-export type Stats = {
-  /** 北京时间的日期，从早到晚，最后一项是今天。 */
-  days: string[];
-  /** 时间窗内没有任何发送的客户不会出现。 */
-  customers: Record<string, Series>;
-  /** 所有结果不明的记录数，不受时间窗限制。 */
-  unresolved: number;
-};
-
-export type AdminApi = {
-  session: () => Promise<Session>;
-  login: (username: string, password: string) => Promise<Session>;
+/** 读会话、登录、退出：两个门户的会话关卡只依赖这三个动作。 */
+export type SessionApi<S> = {
+  session: () => Promise<S>;
+  login: (account: string, password: string) => Promise<S>;
   logout: () => Promise<void>;
-  customers: () => Promise<Customer[]>;
-  customer: (id: string) => Promise<CustomerDetail>;
-  createCustomer: (input: NewCustomer) => Promise<CustomerSecret>;
-  updateCustomer: (id: string, version: number, changes: CustomerChanges) => Promise<CustomerDetail>;
-  resetKey: (id: string, version: number) => Promise<CustomerSecret>;
-  stats: (days?: number) => Promise<Stats>;
-  requests: (filters: RequestFilters) => Promise<RequestPage>;
-  request: (id: number) => Promise<RequestRow>;
-  resolve: (id: number, status: 'accepted' | 'failed', note?: string) => Promise<RequestRow>;
 };

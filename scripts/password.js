@@ -7,7 +7,7 @@ import { parseEnv } from 'node:util';
 import { atomicWrite } from '../src/config.js';
 
 export async function savePassword(password, envPath = fileURLToPath(new URL('../.env', import.meta.url))) {
-  if (password.length < 12 || Buffer.byteLength(password) > 72) throw new Error('密码应至少 12 字符且不超过 72 字节');
+  if (password.length < 8 || Buffer.byteLength(password) > 72) throw new Error('密码应至少 8 字符且不超过 72 字节');
   const hash = await bcrypt.hash(password, 12);
   let content = readFileSync(existsSync(envPath) ? envPath : new URL('../.env.example', import.meta.url), 'utf8');
   const existing = parseEnv(content);

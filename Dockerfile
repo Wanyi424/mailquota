@@ -2,10 +2,10 @@ ARG NODE_IMAGE=docker.m.daocloud.io/library/node:24.21.0-bookworm-slim
 
 FROM ${NODE_IMAGE} AS frontend-build
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts --registry=https://registry.npmmirror.com
+COPY package.json pnpm-lock.yaml ./
+RUN corepack enable && pnpm install --frozen-lockfile --ignore-scripts --registry=https://registry.npmmirror.com
 COPY frontend ./frontend
-RUN npm run build:frontend
+RUN pnpm run build:frontend
 
 FROM ${NODE_IMAGE} AS dependencies
 WORKDIR /app
@@ -18,16 +18,16 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
       sed -i 's|security.debian.org/debian-security|mirrors.aliyun.com/debian-security|g' /etc/apt/sources.list; \
     fi && \
     apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --registry=https://registry.npmmirror.com
+COPY package.json pnpm-lock.yaml ./
+RUN corepack enable && pnpm install --frozen-lockfile --prod --registry=https://registry.npmmirror.com
 
 FROM ${NODE_IMAGE}
 ENV NODE_ENV=production HOST=0.0.0.0 STORAGE_DIR=/app/storage
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY package.json pnpm-lock.yaml ./
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY src ./src
-COPY --from=frontend-build /app/public/admin ./public/admin
+COPY --from=frontend-build /app/public ./public
 COPY scripts ./scripts
 COPY migrations ./migrations
 COPY templates ./templates

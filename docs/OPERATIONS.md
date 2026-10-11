@@ -7,7 +7,7 @@
 配置 `.env` 后直接启动：
 
 ```bash
-npm start
+pnpm start
 ```
 
 Node.js 启动时会在事务中执行 `migrations/001.sql`：
@@ -21,7 +21,7 @@ Node.js 启动时会在事务中执行 `migrations/001.sql`：
 
 如果现有数据库结构与业务要求不兼容，事务回滚，服务拒绝启动，需要人工处理。
 
-`npm run init` 使用同一套结构检查逻辑，可作为部署前预检查，不是每次启动的必需步骤。
+`pnpm run init` 使用同一套结构检查逻辑，可作为部署前预检查，不是每次启动的必需步骤。
 
 ## Docker PostgreSQL
 
