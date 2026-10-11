@@ -4,3 +4,4 @@ storage/
 backups/
 *.log
 test-output/
+.vscode/*

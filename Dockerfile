@@ -1,17 +1,27 @@
-FROM node:24.21.0-bookworm-slim AS frontend-build
+ARG NODE_IMAGE=docker.m.daocloud.io/library/node:24.21.0-bookworm-slim
+
+FROM ${NODE_IMAGE} AS frontend-build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts
+RUN npm ci --ignore-scripts --registry=https://registry.npmmirror.com
 COPY frontend ./frontend
 RUN npm run build:frontend
 
-FROM node:24.21.0-bookworm-slim AS dependencies
+FROM ${NODE_IMAGE} AS dependencies
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
+RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+      sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources && \
+      sed -i 's|security.debian.org/debian-security|mirrors.aliyun.com/debian-security|g' /etc/apt/sources.list.d/debian.sources; \
+    fi && \
+    if [ -f /etc/apt/sources.list ]; then \
+      sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list && \
+      sed -i 's|security.debian.org/debian-security|mirrors.aliyun.com/debian-security|g' /etc/apt/sources.list; \
+    fi && \
+    apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --registry=https://registry.npmmirror.com
 
-FROM node:24.21.0-bookworm-slim
+FROM ${NODE_IMAGE}
 ENV NODE_ENV=production HOST=0.0.0.0 STORAGE_DIR=/app/storage
 WORKDIR /app
 COPY package.json package-lock.json ./
