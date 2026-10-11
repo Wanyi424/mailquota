@@ -27,7 +27,7 @@ export function createMailer(options) {
               dataStarted = true;
               connection.send(composer.getEnvelope(), message, (error, info) => {
                 if (error) return failed(error);
-                finish({ status: info.accepted?.length === 1 ? 'accepted' : 'failed', messageId: composer.messageId() });
+                finish({ status: info.accepted?.length ? 'accepted' : 'failed', messageId: composer.messageId(), accepted: info.accepted || [], rejected: info.rejected || [], envelope: info.envelope || composer.getEnvelope(), response: info.response || null });
               });
             };
             if (options.auth) connection.login(options.auth, send); else send();

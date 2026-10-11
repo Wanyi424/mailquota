@@ -1,70 +1,20 @@
-import { readFileSync, writeFileSync, renameSync, unlinkSync, openSync, closeSync, fsyncSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { randomBytes, randomUUID } from 'node:crypto';
-import { z } from 'zod';
-import { customerSchema, createSchema, htmlSchema } from './validation.js';
+import { createHash, randomBytes } from 'node:crypto';
+import bcrypt from 'bcryptjs';
+import { createSchema, updateSchema } from './validation.js';
 import { fail, parse } from './errors.js';
-
-export function atomicWrite(path, text) {
-  const tmp = `${path}.${randomUUID()}.tmp`;
-  let fd;
-  try {
-    fd = openSync(tmp, 'wx', 0o600); writeFileSync(fd, text); fsyncSync(fd); closeSync(fd); fd = undefined;
-    renameSync(tmp, path);
-  } finally { if (fd !== undefined) closeSync(fd); if (existsSync(tmp)) unlinkSync(tmp); }
-}
+export const keyHash = key => createHash('sha256').update(key).digest('hex');
+const select = 'SELECT t.*, q.quota_total, q.used_count, q.reserved_count, m.from_name, m.subject, m.html_template, m.text_template, m.reply_to, m.version FROM tenants t JOIN tenant_quotas q ON q.tenant_id=t.id JOIN tenant_mail_configs m ON m.tenant_id=t.id';
+const publicConfig = r => ({tenant_id:r.id,customer_id:r.customer_id,name:r.name,enabled:r.enabled,from_name:r.from_name,subject:r.subject,html_template:r.html_template,text_template:r.text_template,reply_to:r.reply_to,version:Number(r.version),quota_total:Number(r.quota_total),used_count:Number(r.used_count),reserved_count:Number(r.reserved_count),available_count:Number(r.quota_total)-Number(r.used_count)-Number(r.reserved_count)});
 export class ConfigStore {
-  constructor(root, db) {
-    this.root = root; this.db = db; this.path = join(root, 'config', 'customers.json');
-    const raw = z.object({ customers: z.array(customerSchema) }).strict().parse(JSON.parse(readFileSync(this.path, 'utf8')));
-    this.customers = new Map();
-    for (const c of raw.customers) {
-      if (this.customers.has(c.customer_id)) throw new Error('客户 ID 重复');
-      this.customers.set(c.customer_id, Object.freeze({ ...c, html: htmlSchema.parse(readFileSync(join(root, 'templates', c.html_template), 'utf8')) }));
-    }
-    this.check();
-  }
-  check() {
-    if (!existsSync(this.path) || !existsSync(join(this.root, 'data', 'mailquota.sqlite'))) throw new Error('必要持久化文件丢失');
-    for (const c of this.customers.values()) {
-      const u = this.db.prepare('SELECT * FROM customer_usage WHERE customer_id=?').get(c.customer_id);
-      if (!u || c.quota_total < u.used_count + u.reserved_count || !existsSync(join(this.root, 'templates', c.html_template))) throw new Error('客户配置、模板或用量不一致');
-    }
-    this.db.prepare('SELECT count(*) FROM customer_usage').get();
-  }
-  get(id) { return this.customers.get(id); }
-  require(id) { const c = this.get(id); if (!c) fail(404, 'CUSTOMER_NOT_FOUND', '客户不存在'); return c; }
-  publish(c) {
-    const next = new Map(this.customers); next.set(c.customer_id, Object.freeze(c));
-    atomicWrite(this.path, JSON.stringify({ customers: [...next.values()].map(({ html, ...v }) => v) }, null, 2) + '\n');
-    this.customers = next;
-  }
-  create(input) {
-    const { html, ...value } = parse(createSchema, input);
-    if (this.get(value.customer_id) || this.db.prepare('SELECT 1 FROM customer_usage WHERE customer_id=?').get(value.customer_id)) fail(409, 'CUSTOMER_EXISTS', '客户 ID 已存在或有未发布用量行，请检查配置');
-    const c = { ...value, api_key: randomBytes(32).toString('base64url'), version: 1, html_template: `${value.customer_id}_${randomUUID()}.html`, html };
-    this.db.prepare('INSERT INTO customer_usage(customer_id,updated_at) VALUES(?,?)').run(c.customer_id, Date.now());
-    atomicWrite(join(this.root, 'templates', c.html_template), html);
-    this.publish(c); return c;
-  }
-  update(id, oldVersion, changes, newHtml) {
-    const current = this.require(id);
-    if (oldVersion !== current.version) fail(409, 'EDIT_CONFLICT', '配置已更新，请刷新后再保存');
-    const c = { ...current, ...changes, version: current.version + 1 };
-    if (c.quota_total < current.quota_total) fail(400, 'INVALID_ARGUMENT', '总额度只能增加');
-    parse(customerSchema, (({ html, ...v }) => v)(c));
-    if (newHtml !== undefined) {
-      c.html = parse(htmlSchema, newHtml);
-      // Immutable template names keep the old configuration valid if publishing JSON fails.
-      c.html_template = `${id}_${randomUUID()}.html`;
-      atomicWrite(join(this.root, 'templates', c.html_template), c.html);
-    }
-    this.publish(c); return c;
-  }
-  public(c) {
-    const { api_key, html, ...rest } = c;
-    const u = this.db.prepare('SELECT used_count,reserved_count FROM customer_usage WHERE customer_id=?').get(c.customer_id);
-    if (!u) throw new Error('客户用量行丢失');
-    return { ...rest, api_key_mask: `********${api_key.slice(-4)}`, ...u, available_count: c.quota_total - u.used_count - u.reserved_count };
-  }
+ constructor(db){this.db=db}
+ async check(){await this.db.query('SELECT 1 FROM tenants LIMIT 1')}
+ async get(id){return (await this.db.query(select+' WHERE t.id=$1',[id])).rows[0]}
+ async requireCustomer(id){const r=(await this.db.query(select+' WHERE t.customer_id=$1',[id])).rows[0];if(!r)fail(404,'TENANT_NOT_FOUND','租户不存在');return r}
+ async authenticate(id,key){const t=await this.requireCustomer(id);if(!(await this.db.query("SELECT 1 FROM tenant_api_keys WHERE tenant_id=$1 AND key_hash=$2 AND status='active'",[t.id,keyHash(key||'')])).rowCount)fail(401,'AUTH_INVALID','客户认证无效，请联系管理员');if(!t.enabled)fail(403,'TENANT_DISABLED','租户已停用，请联系管理员');return t}
+ async list(){return (await this.db.query(select+' ORDER BY t.created_at')).rows.map(publicConfig)}
+ async create(input,actor){const b=parse(createSchema,input),apiKey=randomBytes(32).toString('base64url');const t=await this.db.transaction(async tx=>{const r=(await tx.query('INSERT INTO tenants(customer_id,name,enabled) VALUES($1,$2,$3) RETURNING *',[b.customer_id,b.name,b.enabled])).rows[0];await tx.query('INSERT INTO tenant_accounts(tenant_id,login_name,password_hash) VALUES($1,$2,$3)',[r.id,b.login_name,await bcrypt.hash(b.password,12)]);await tx.query("INSERT INTO tenant_api_keys(tenant_id,key_hash,status,created_by_type,created_by_id) VALUES($1,$2,'active','admin',$3)",[r.id,keyHash(apiKey),actor]);await tx.query('INSERT INTO tenant_mail_configs(tenant_id,from_name,subject,html_template,text_template,reply_to) VALUES($1,$2,$3,$4,$5,$6)',[r.id,b.from_name,b.subject,b.html_template,b.text_template,b.reply_to||null]);await tx.query('INSERT INTO tenant_quotas(tenant_id,quota_total) VALUES($1,$2)',[r.id,b.quota_total]);return r});return {...publicConfig(await this.requireCustomer(t.customer_id)),api_key:apiKey}}
+ async update(id,input){const c=await this.requireCustomer(id),b=parse(updateSchema,input);await this.db.transaction(async tx=>{if(b.name!==undefined||b.enabled!==undefined)await tx.query('UPDATE tenants SET name=COALESCE($1,name),enabled=COALESCE($2,enabled),updated_at=now() WHERE id=$3',[b.name??null,b.enabled??null,c.id]);if(['from_name','subject','html_template','text_template','reply_to'].some(k=>b[k]!==undefined)){const r=await tx.query('UPDATE tenant_mail_configs SET from_name=COALESCE($1,from_name),subject=COALESCE($2,subject),html_template=COALESCE($3,html_template),text_template=COALESCE($4,text_template),reply_to=COALESCE($5,reply_to),version=version+1,updated_at=now() WHERE tenant_id=$6 AND version=$7',[b.from_name??null,b.subject??null,b.html_template??null,b.text_template??null,b.reply_to??null,c.id,b.version]);if(!r.rowCount)fail(409,'EDIT_CONFLICT','配置已更新，请刷新后再保存')}});return this.requireCustomer(id)}
+ public(r){return publicConfig(r)}
+ async resetKey(id,actor){const t=await this.requireCustomer(id),key=randomBytes(32).toString('base64url');await this.db.transaction(async tx=>{await tx.query("UPDATE tenant_api_keys SET status='revoked',revoked_at=now(),revoked_by_type='admin',revoked_by_id=$1 WHERE tenant_id=$2 AND status='active'",[actor,t.id]);await tx.query("INSERT INTO tenant_api_keys(tenant_id,key_hash,status,created_by_type,created_by_id) VALUES($1,$2,'active','admin',$3)",[t.id,keyHash(key),actor])});return {...this.public(t),api_key:key}}
+ async resetPassword(id,password){const t=await this.requireCustomer(id);await this.db.query('UPDATE tenant_accounts SET password_hash=$1,updated_at=now() WHERE tenant_id=$2',[await bcrypt.hash(password,12),t.id])}
 }

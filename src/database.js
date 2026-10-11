@@ -1,10 +1,23 @@
-import Database from 'better-sqlite3';
+import pg from 'pg';
 import { readFileSync } from 'node:fs';
-export function openDatabase(path, initialize = false) {
-  const db = new Database(path, { fileMustExist: !initialize, timeout: 5000 });
-  db.pragma('journal_mode = WAL'); db.pragma('foreign_keys = ON'); db.pragma('synchronous = FULL');
-  const v = db.pragma('user_version', { simple: true });
-  if (initialize && v === 0) db.transaction(() => db.exec(readFileSync(new URL('../migrations/001.sql', import.meta.url), 'utf8')))();
-  else if (v !== 1) { db.close(); throw new Error('数据库版本不受支持；请显式执行迁移，禁止重新初始化现有数据'); }
-  return db;
+export function openDatabase(connectionString, initialize = false) {
+  if (!connectionString) throw new Error('DATABASE_URL 未配置');
+  const pool = new pg.Pool({connectionString, max: 5, idleTimeoutMillis: 30000, connectionTimeoutMillis: 5000, statement_timeout: 10000});
+  // Idle connection errors must not terminate the process; readiness will report failures.
+  pool.on('error', () => {});
+  pool.transaction = async (fn, readOnly = false) => {
+    const client = await pool.connect();
+    try {
+      await client.query(readOnly ? 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' : 'BEGIN');
+      const value = await fn(client);
+      await client.query('COMMIT');
+      return value;
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch {}
+      throw error;
+    } finally { client.release(); }
+  };
+  pool.ensureSchema = () => pool.transaction(client => client.query(readFileSync(new URL('../migrations/001.sql', import.meta.url), 'utf8')));
+  if (initialize) pool.initialization = pool.ensureSchema();
+  return pool;
 }
