@@ -22,7 +22,7 @@ COPY package.json pnpm-lock.yaml ./
 RUN corepack enable && pnpm install --frozen-lockfile --prod --registry=https://registry.npmmirror.com
 
 FROM ${NODE_IMAGE}
-ENV NODE_ENV=production HOST=0.0.0.0 STORAGE_DIR=/app/storage
+ENV NODE_ENV=production HOST=0.0.0.0
 WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 COPY --from=dependencies /app/node_modules ./node_modules
@@ -31,7 +31,6 @@ COPY --from=frontend-build /app/public ./public
 COPY scripts ./scripts
 COPY migrations ./migrations
 COPY templates ./templates
-RUN mkdir -p /app/storage && chown node:node /app/storage
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s CMD node -e "fetch('http://127.0.0.1:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
