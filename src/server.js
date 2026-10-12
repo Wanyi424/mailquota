@@ -26,4 +26,4 @@ try {
   };
   process.on('SIGTERM', stop); process.on('SIGINT', stop);
   server.on('error', () => { logger({ event: 'listen_failed' }); stop(); });
-} catch (e) { console.error('MailQuota 启动失败，请核查环境配置、持久化目录和数据库版本。'); if (e.message.startsWith('环境配置无效:')) console.error(e.message); process.exitCode = 1; }
+} catch (e) { console.error('MailQuota 启动失败:', e.message || e); process.exitCode = 1; }

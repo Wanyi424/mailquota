@@ -3,6 +3,8 @@ services:
     build: .
     image: mailquota:local
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file: .env
     environment:
       HOST: 0.0.0.0
